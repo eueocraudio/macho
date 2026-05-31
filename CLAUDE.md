@@ -35,13 +35,14 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 
 1. Lê vídeos de `/home/user/Videos/gravado/`
 2. Para cada vídeo, cria `/home/user/Videos/final/<stem>/` e aplica o pitch male
-3. Pergunta ao usuário: **"Deseja gerar legendas (SRT), YOUTUBE.txt e report.txt?"** — se não, pula para o passo 8
+3. Pergunta ao usuário: **"Deseja gerar legendas (SRT), YOUTUBE.txt e report.txt?"** — se não, pula para o passo 10
 4. Detecta a língua do vídeo via Whisper (lazy — sem consumir os segmentos ainda)
 5. Se já existe `LEGENDAS_{língua}.srt` para essa língua, pula a transcrição; caso contrário, consome os segmentos e salva o SRT
-6. Pergunta ao usuário: **"Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?"** — se sim, usa `claude-opus-4-8` via `ANTHROPIC_API_KEY`; se não, usa spaCy + NLTK
-7. Gera `YOUTUBE.txt` com título, descrição, palavras-chave e conceitos
-8. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
-9. Move o original para `/home/user/Videos/processado/`
+6. Detecta marcadores de corte no SRT: se há pares "inicio do corte" / "fim do corte", aplica os cortes no vídeo via ffmpeg e regera o SRT (2ª transcrição)
+7. Pergunta ao usuário: **"Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?"** — se sim, usa `claude-opus-4-8` via `ANTHROPIC_API_KEY`; se não, usa spaCy + NLTK
+8. Gera `YOUTUBE.txt` com título, descrição, palavras-chave e conceitos
+9. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
+10. Move o original para `/home/user/Videos/processado/`
 
 ## Módulos Python
 
@@ -58,7 +59,9 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 - **Generator lazy do Whisper**: `model.transcribe()` retorna `(segments, info)` onde `segments` é um generator consumível apenas uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes do consumo. Iterar `segments` uma segunda vez retornará vazio.
 - **Transcrição usa o arquivo processado**: o Whisper roda sobre o vídeo com pitch já aplicado (`arquivo_saida`), não sobre o original.
 - **ffmpeg usa `-y`**: sobrescreve arquivos de saída sem confirmação — relevante ao re-processar vídeos que já têm output em `DIR_SAIDA`.
-- **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto. Não adicionar filtros de vídeo sem remover esse flag.
+- **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto na etapa de pitch. Os cortes (`aplicar_cortes`) usam `filter_complex` com `trim`+`concat`, o que re-codifica o vídeo — não usar `-c:v copy` em conjunto com esse filtro.
+- **Cortes exigem par de marcadores**: `MARCADOR_INICIO_CORTE` sem `MARCADOR_FIM_CORTE` correspondente é ignorado silenciosamente. Marcadores são comparados após normalização de caixa e acentos via `unicodedata`.
+- **Cortes só acontecem com legenda**: se o usuário recusar gerar legenda, nenhum corte é aplicado (sem SRT, sem detecção de marcadores).
 - **Falha parcial**: se pitch succeed mas transcrição falha, o arquivo processado permanece em `DIR_SAIDA` mas o original fica em `DIR_ENTRADA` (não é movido).
 - **YOUTUBE.txt e report.txt são não-bloqueantes**: falha exibe aviso mas não interrompe o processamento nem impede a movimentação do original.
 - **Modelos spaCy são cacheados**: `_cache_modelos` em `youtube.py` evita recarga entre vídeos do mesmo lote.
@@ -83,6 +86,8 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 | `WHISPER_MODEL` | `small` | Modelo Whisper: `tiny`, `base`, `small`, `medium`, `large` |
 | `PALAVRAS_FILTRO` | — | Palavras monitoradas no `report.txt`, separadas por vírgula |
 | `PALAVRAS_EXCLUIR` | — | Palavras banidas do `YOUTUBE.txt`, separadas por vírgula |
+| `MARCADOR_INICIO_CORTE` | `inicio do corte` | Frase dita para marcar o início de um trecho a cortar |
+| `MARCADOR_FIM_CORTE` | `fim do corte` | Frase dita para marcar o fim de um trecho a cortar |
 
 Referência de `PITCH_FATOR` por semitons:
 

@@ -2,6 +2,8 @@ import subprocess;
 import shutil;
 import sys;
 import os;
+import re;
+import unicodedata;
 from pathlib import Path;
 from dotenv import load_dotenv;
 from faster_whisper import WhisperModel;
@@ -27,13 +29,91 @@ EQ_GRAVES_GAIN = int(os.getenv("EQ_GRAVES_GAIN",   "2"));
 EQ_METAL_FREQ  = int(os.getenv("EQ_METAL_FREQ",    "3500"));
 EQ_METAL_WIDTH = int(os.getenv("EQ_METAL_WIDTH",   "1000"));
 EQ_METAL_GAIN  = int(os.getenv("EQ_METAL_GAIN",    "-3"));
-WHISPER_MODEL    = os.getenv("WHISPER_MODEL", "small");
-PALAVRAS_FILTRO  = [p.strip() for p in os.getenv("PALAVRAS_FILTRO",  "").split(",") if p.strip()];
-PALAVRAS_EXCLUIR = [p.strip() for p in os.getenv("PALAVRAS_EXCLUIR", "").split(",") if p.strip()];
+WHISPER_MODEL       = os.getenv("WHISPER_MODEL", "small");
+PALAVRAS_FILTRO     = [p.strip() for p in os.getenv("PALAVRAS_FILTRO",  "").split(",") if p.strip()];
+PALAVRAS_EXCLUIR    = [p.strip() for p in os.getenv("PALAVRAS_EXCLUIR", "").split(",") if p.strip()];
+MARCADOR_INICIO_CORTE = os.getenv("MARCADOR_INICIO_CORTE", "inicio do corte");
+MARCADOR_FIM_CORTE    = os.getenv("MARCADOR_FIM_CORTE",    "fim do corte");
 
 EXTENSOES_VIDEO = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".ts"};
 
 console = Console();
+
+
+def _normalizar(texto: str) -> str:
+    nfkd = unicodedata.normalize("NFKD", texto.lower().strip());
+    return "".join(c for c in nfkd if not unicodedata.combining(c));
+
+
+def _srt_para_segundos(timestamp: str) -> float:
+    h, m, resto = timestamp.split(":");
+    s, ms = resto.split(",");
+    return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000;
+
+
+def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) -> list[tuple[float, float]]:
+    norm_inicio = _normalizar(marcador_inicio);
+    norm_fim    = _normalizar(marcador_fim);
+    texto = arquivo_srt.read_text(encoding="utf-8");
+    blocos = re.split(r"\n\n+", texto.strip());
+    cortes = [];
+    inicio_pendente = None;
+    for bloco in blocos:
+        linhas = bloco.strip().splitlines();
+        if len(linhas) < 3:
+            continue;
+        m = re.match(r"(\S+)\s+-->\s+(\S+)", linhas[1]);
+        if not m:
+            continue;
+        t_inicio = _srt_para_segundos(m.group(1));
+        t_fim    = _srt_para_segundos(m.group(2));
+        conteudo = _normalizar(" ".join(linhas[2:]));
+        if conteudo == norm_inicio:
+            inicio_pendente = t_inicio;
+        elif conteudo == norm_fim and inicio_pendente is not None:
+            cortes.append((inicio_pendente, t_fim));
+            inicio_pendente = None;
+    return cortes;
+
+
+def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]) -> tuple[bool, str]:
+    cortes_ord = sorted(cortes);
+    manter = [];
+    pos = 0.0;
+    for inicio, fim in cortes_ord:
+        if pos < inicio:
+            manter.append((pos, inicio));
+        pos = fim;
+    manter.append((pos, None));
+
+    filtros = [];
+    for i, (s, e) in enumerate(manter):
+        if e is not None:
+            filtros.append(f"[0:v]trim=start={s}:end={e},setpts=PTS-STARTPTS[v{i}]");
+            filtros.append(f"[0:a]atrim=start={s}:end={e},asetpts=PTS-STARTPTS[a{i}]");
+        else:
+            filtros.append(f"[0:v]trim=start={s},setpts=PTS-STARTPTS[v{i}]");
+            filtros.append(f"[0:a]atrim=start={s},asetpts=PTS-STARTPTS[a{i}]");
+
+    n = len(manter);
+    concat_inputs = "".join(f"[v{i}][a{i}]" for i in range(n));
+    filtros.append(f"{concat_inputs}concat=n={n}:v=1:a=1[v][a]");
+
+    tmp = saida.parent / f"_tmp_corte_{saida.stem}{saida.suffix}";
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(entrada),
+        "-filter_complex", "; ".join(filtros),
+        "-map", "[v]",
+        "-map", "[a]",
+        str(tmp),
+    ];
+    resultado = subprocess.run(cmd, capture_output=True, text=True);
+    if resultado.returncode != 0:
+        tmp.unlink(missing_ok=True);
+        return False, resultado.stderr[-800:];
+    tmp.rename(saida);
+    return True, "";
 
 
 def listar_videos() -> list[Path]:
@@ -163,13 +243,29 @@ def processar():
                 falha.append((video.name, lingua_ou_erro));
                 continue;
 
+            cortes = detectar_cortes(arquivo_srt, MARCADOR_INICIO_CORTE, MARCADOR_FIM_CORTE);
+            if cortes:
+                progress.update(task, description=f"[cyan]{video.name}[/cyan] — aplicando {len(cortes)} corte(s)...");
+                ok_c, erro_c = aplicar_cortes(arquivo_saida, arquivo_saida, cortes);
+                if not ok_c:
+                    console.print(f"[yellow]aviso:[/yellow] não foi possível aplicar cortes: {erro_c}");
+                else:
+                    progress.update(task, description=f"[cyan]{video.name}[/cyan] — retranscrevendo após cortes ({lingua_ou_erro})...");
+                    try:
+                        segments2, _ = model.transcribe(str(arquivo_saida), beam_size=5);
+                        ok_t2, _ = escrever_srt(segments2, lingua_ou_erro, dir_destino);
+                        if not ok_t2:
+                            console.print(f"[yellow]aviso:[/yellow] não foi possível regerar legenda após cortes");
+                    except Exception as e2:
+                        console.print(f"[yellow]aviso:[/yellow] erro na retranscrição após cortes: {e2}");
+
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando metadados YouTube...");
             ok_yt, erro_yt = gerar_youtube_txt(arquivo_srt, dir_destino, lingua_ou_erro, PALAVRAS_EXCLUIR, usar_api_youtube);
             if not ok_yt:
                 console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
 
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando report...");
-            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO);
+            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO, cortes if cortes else None);
             if not ok_rp:
                 console.print(f"[yellow]aviso:[/yellow] não foi possível gerar report.txt: {erro_rp}");
 

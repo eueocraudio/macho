@@ -4,7 +4,7 @@
 
 Você gravou um vídeo, mas sua voz ficou fininha demais? Esse script resolve isso.
 
-Ele pega todos os vídeos de uma pasta, aplica um efeito de voz masculina (mais grave, mais encorpada), gera a transcrição automática em SRT, prepara um arquivo de texto com título, descrição e palavras-chave prontos para colar no YouTube, e ainda gera um relatório de palavras que você queira monitorar.
+Ele pega todos os vídeos de uma pasta, aplica um efeito de voz masculina (mais grave, mais encorpada), corta automaticamente os trechos que você marcou durante a gravação, gera a transcrição automática em SRT, prepara um arquivo de texto com título, descrição e palavras-chave prontos para colar no YouTube, e ainda gera um relatório de palavras que você queira monitorar.
 
 ---
 
@@ -14,13 +14,14 @@ Para cada vídeo encontrado na pasta de entrada:
 
 1. Aplica o efeito de **Pitch Male** na voz (usando ffmpeg com rubberband)
 2. Salva o vídeo novo em uma pasta separada
-3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 9
+3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 10
 4. Detecta automaticamente o idioma do vídeo
 5. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
-6. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
-7. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
-8. Gera um arquivo **`report.txt`** com a tabela de ocorrências das palavras que você quer monitorar
-9. Move o vídeo original para uma pasta de "já processados"
+6. Detecta **marcadores de corte** na legenda e, se houver, remove os trechos do vídeo e regera a legenda com os tempos corretos
+7. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
+8. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
+9. Gera um arquivo **`report.txt`** com os cortes realizados e as ocorrências das palavras monitoradas
+10. Move o vídeo original para uma pasta de "já processados"
 
 ---
 
@@ -82,6 +83,16 @@ Use `PALAVRAS_EXCLUIR`. Essas palavras não vão aparecer em nenhuma parte do t�
 PALAVRAS_EXCLUIR=merda,corta,coleguinha,eu
 ```
 
+**Quer mudar as frases de marcação de corte?**
+Por padrão, o script detecta "inicio do corte" e "fim do corte" na legenda. Você pode trocar por qualquer coisa que preferir falar durante a gravação:
+
+```
+MARCADOR_INICIO_CORTE=começa o corte
+MARCADOR_FIM_CORTE=termina o corte
+```
+
+A comparação ignora acentos e maiúsculas, então "Início do Corte" e "inicio do corte" são tratados igual.
+
 **Quer usar a IA da Anthropic para gerar título e descrição?**
 Configure sua chave de API no `.env`:
 
@@ -141,9 +152,25 @@ Por padrão tudo é gerado localmente com spaCy + NLTK, sem depender de API exte
 
 ## O arquivo report.txt
 
-Mostra em forma de tabela cada vez que uma palavra monitorada apareceu na transcrição, com o tempo exato:
+Pode ter até duas seções, dependendo do que aconteceu no processamento.
+
+**Cortes aplicados** — aparece quando o script removeu trechos do vídeo, com o tempo de início, fim e duração de cada corte:
 
 ```
+CORTES APLICADOS
+
++---+---------------+---------------+---------------+
+| # | INÍCIO        | FIM           | DURAÇÃO       |
++---+---------------+---------------+---------------+
+| 1 | 00:01:05.320  | 00:01:48.910  | 00:00:43.590  |
++---+---------------+---------------+---------------+
+```
+
+**Palavras monitoradas** — aparece quando você configurou `PALAVRAS_FILTRO`, com o tempo exato de cada ocorrência:
+
+```
+PALAVRAS MONITORADAS
+
 +-----------+--------------+
 | PALAVRA   | TEMPO        |
 +-----------+--------------+
@@ -152,7 +179,7 @@ Mostra em forma de tabela cada vez que uma palavra monitorada apareceu na transc
 +-----------+--------------+
 ```
 
-Se nenhuma das palavras aparecer no vídeo, a tabela informa que não houve ocorrências.
+Se nenhuma das palavras aparecer no vídeo, a tabela informa que não houve ocorrências. Se não houver nem cortes nem palavras monitoradas, o `report.txt` não é gerado.
 
 ---
 
