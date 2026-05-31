@@ -53,8 +53,9 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 7. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
 8. Move o original para `/home/user/Videos/processado/`
 
-> A detecção de língua e a transcrição usam o mesmo `model.transcribe()` — não há chamada dupla ao modelo.
+> `model.transcribe()` retorna `(segments, info)` onde `segments` é um **generator lazy** — só é consumido uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes de consumir o generator. Qualquer tentativa de iterar `segments` uma segunda vez resultará em iterador vazio.
 > `YOUTUBE.txt` e `report.txt` são não-bloqueantes: falha exibe aviso mas não interrompe o processamento.
+> Os modelos spaCy são cacheados em `_cache_modelos` (módulo `youtube.py`) para evitar recarga entre vídeos do mesmo lote.
 
 ### Configuração (.env)
 
@@ -92,9 +93,16 @@ Referência de `PITCH_FATOR` por semitons:
 
 # Executar
 /home/user/projetos/macho/run.sh
+
+# Executar diretamente durante desenvolvimento (equivalente ao run.sh)
+python3 /home/user/projetos/macho/src/main.py
 ```
 
 O `install.sh` também cria os diretórios de vídeo (`gravado/`, `final/`, `processado/`) caso não existam.
+
+### Importações e path
+
+`main.py` importa `youtube` e `report` como módulos irmãos (`from youtube import ...`). Isso funciona porque o Python adiciona o diretório do script (`src/`) ao `sys.path` automaticamente ao executar `python3 src/main.py`. Nunca executar `python3 main.py` de dentro de `src/` sem garantir que `src/` esteja no path.
 
 ### Módulos Python
 
