@@ -10,8 +10,10 @@ from report import gerar_report_txt;
 from rich.console import Console;
 from rich.panel import Panel;
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn;
+from rich.prompt import Confirm;
 from rich.table import Table;
 
+load_dotenv(Path.home() / ".env");
 load_dotenv(Path(__file__).parent.parent / ".env");
 
 DIR_ENTRADA = Path(os.getenv("DIR_ENTRADA", "/home/user/Videos/gravado"));
@@ -101,8 +103,15 @@ def processar():
         tabela.add_row(str(i), v.name);
     console.print(tabela);
 
-    console.print(f"\n[dim]Carregando modelo Whisper ({WHISPER_MODEL})...[/dim]");
-    model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8");
+    fazer_legenda = Confirm.ask("\nDeseja gerar legendas (SRT), YOUTUBE.txt e report.txt?", default=True);
+
+    if fazer_legenda:
+        usar_api_youtube = Confirm.ask("Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?", default=False);
+        console.print(f"\n[dim]Carregando modelo Whisper ({WHISPER_MODEL})...[/dim]");
+        model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8");
+    else:
+        usar_api_youtube = False;
+        model = None;
 
     sucesso = [];
     falha   = [];
@@ -123,6 +132,12 @@ def processar():
             if not ok:
                 progress.update(task, description=f"[red]✗ pitch[/red] {video.name}");
                 falha.append((video.name, erro));
+                continue;
+
+            if not fazer_legenda:
+                shutil.move(str(video), DIR_BACKUP / video.name);
+                progress.update(task, description=f"[green]✓[/green] {video.name} [dim](sem legenda)[/dim]");
+                sucesso.append(video.name);
                 continue;
 
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — detectando língua...");
@@ -149,7 +164,7 @@ def processar():
                 continue;
 
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando metadados YouTube...");
-            ok_yt, erro_yt = gerar_youtube_txt(arquivo_srt, dir_destino, lingua_ou_erro, PALAVRAS_EXCLUIR);
+            ok_yt, erro_yt = gerar_youtube_txt(arquivo_srt, dir_destino, lingua_ou_erro, PALAVRAS_EXCLUIR, usar_api_youtube);
             if not ok_yt:
                 console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
 

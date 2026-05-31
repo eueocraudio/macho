@@ -7,7 +7,7 @@ apt-get update -qq
 apt-get install -y ffmpeg python3 python3-pip
 
 echo "==> Instalando dependências Python..."
-runuser user -c "pip3 install --break-system-packages rich python-dotenv faster-whisper nltk spacy"
+runuser user -c "pip3 install --break-system-packages rich python-dotenv faster-whisper nltk spacy anthropic"
 
 echo "==> Baixando modelos spaCy..."
 runuser user -c "python3 -m spacy download pt_core_news_sm --break-system-packages"

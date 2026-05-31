@@ -3,6 +3,10 @@ from collections import Counter;
 import re;
 import nltk;
 import spacy;
+try:
+    import anthropic as _anthropic;
+except ImportError:
+    _anthropic = None;
 
 # Mapa língua Whisper → modelo spaCy
 _MODELOS_SPACY: dict[str, str] = {
@@ -121,11 +125,53 @@ def _titulo(doc, palavras_chave: list[str], excluir_set: set[str]) -> str:
     return pontuadas[0][2] if pontuadas else "";
 
 
+def _titulo_descricao_via_api(
+    texto: str,
+    lingua: str,
+    palavras_excluir: list[str],
+) -> tuple[str, str]:
+    if _anthropic is None:
+        raise RuntimeError("Pacote 'anthropic' não instalado. Execute: pip3 install anthropic --break-system-packages");
+    client = _anthropic.Anthropic();
+    user_content = f"Transcrição (idioma: {lingua}):\n{texto}";
+    if palavras_excluir:
+        user_content = f"Palavras proibidas (não use): {', '.join(palavras_excluir)}\n\n" + user_content;
+    response = client.messages.create(
+        model="claude-opus-4-8",
+        max_tokens=1024,
+        system=[{
+            "type": "text",
+            "text": (
+                "Você recebe a transcrição de um vídeo e deve gerar metadados para o YouTube.\n\n"
+                "Regras:\n"
+                "- TÍTULO: máximo 15 palavras, direto, sem clickbait, com ao menos uma palavra-chave do vídeo\n"
+                "- DESCRIÇÃO: 3-4 frases resumindo o conteúdo principal, em ordem natural\n"
+                "- Nunca use palavras listadas como proibidas\n\n"
+                "Responda EXATAMENTE neste formato (sem mais nada):\n"
+                "TÍTULO: <título aqui>\n"
+                "DESCRIÇÃO: <descrição aqui>"
+            ),
+            "cache_control": {"type": "ephemeral"},
+        }],
+        messages=[{"role": "user", "content": user_content}],
+    );
+    resposta = next((b.text for b in response.content if b.type == "text"), "");
+    titulo = "";
+    descricao = "";
+    for linha in resposta.splitlines():
+        if linha.startswith("TÍTULO:"):
+            titulo = linha[len("TÍTULO:"):].strip();
+        elif linha.startswith("DESCRIÇÃO:"):
+            descricao = linha[len("DESCRIÇÃO:"):].strip();
+    return titulo, descricao;
+
+
 def gerar_youtube_txt(
     caminho_srt: Path,
     dir_saida: Path,
     lingua: str,
     palavras_excluir: list[str] | None = None,
+    usar_api: bool = False,
 ) -> tuple[bool, str]:
     try:
         texto = _texto_do_srt(caminho_srt);
@@ -139,8 +185,12 @@ def gerar_youtube_txt(
 
         palavras  = _palavras_chave(doc, lingua, excluir_set);
         conceitos = _conceitos(doc, excluir_set);
-        descricao = _descricao(doc, palavras, excluir_set);
-        titulo    = _titulo(doc, palavras, excluir_set);
+
+        if usar_api:
+            titulo, descricao = _titulo_descricao_via_api(texto, lingua, palavras_excluir or []);
+        else:
+            descricao = _descricao(doc, palavras, excluir_set);
+            titulo    = _titulo(doc, palavras, excluir_set);
 
         linhas_conceitos = "\n".join(f"- {c}" for c in conceitos);
         conteudo = (
