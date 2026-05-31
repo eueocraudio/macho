@@ -2,52 +2,37 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Linguagem de programação
-
-Use Python por padrão em todo código novo, scripts e exemplos. Se o usuário nomear outra linguagem explicitamente, use ela. Sempre invocar o interpretador como `python3` e o gerenciador de pacotes como `pip3`. Sempre usar a flag `--break-system-packages` ao executar `pip3`.
-
-## Idioma
-
-- Comentários no código, regras e documentação: em português
-- Nomes de classes, arquivos, variáveis e funções: em inglês
-- Responder sempre em português
-
-## Estrutura de diretórios
-
-Todo código novo vai em `src/`, a não ser que outro diretório seja indicado explicitamente.
-
-## Execução de scripts
-
-Ao executar arquivos `.sh` com permissão de execução, usar sempre o caminho completo do executável (ex: `/home/user/projetos/macho/run.sh`).
-
-## Regras específicas para Python
-
-Todas as regras abaixo se aplicam exclusivamente a código Python:
-
-### Interface
-
-Este projeto é uma aplicação de terminal (CLI/TUI). Nunca usar PySide6 ou qualquer biblioteca gráfica. Para TUI, usar `rich` ou `textual`.
-
-### Estilo de código
-- Terminar todas as linhas de instrução com `;`
-- Usar 4 espaços para indentação (nunca TAB)
-
 ## Sobre o projeto
 
 Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` com o filtro `rubberband`, gera transcrição em SRT usando `faster-whisper`, cria metadados para YouTube usando `spaCy` e `NLTK`, e gera relatório de palavras monitoradas.
 
-### Diretórios de vídeo
+## Comandos
+
+```bash
+# Instalar dependências e criar diretórios (rodar como root)
+/home/user/projetos/macho/install.sh
+
+# Executar
+/home/user/projetos/macho/run.sh
+
+# Executar diretamente durante desenvolvimento
+python3 /home/user/projetos/macho/src/main.py
+```
+
+## Interface
+
+Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualquer biblioteca gráfica. Para TUI, usar `rich` ou `textual`.
+
+## Diretórios de vídeo
+
 | Diretório | Função |
 |---|---|
 | `/home/user/Videos/gravado/` | Entrada — vídeos a processar |
 | `/home/user/Videos/final/<nome_video>/` | Saída — vídeo + legenda + YOUTUBE.txt + report.txt |
 | `/home/user/Videos/processado/` | Arquivo — originais processados com sucesso |
 
-### Extensões de vídeo aceitas
+## Fluxo de processamento
 
-`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.flv`, `.ts` (definidas em `EXTENSOES_VIDEO` em `main.py`).
-
-### Fluxo
 1. Lê vídeos de `/home/user/Videos/gravado/`
 2. Para cada vídeo, cria `/home/user/Videos/final/<stem>/` e aplica o pitch male
 3. Pergunta ao usuário: **"Deseja gerar legendas (SRT), YOUTUBE.txt e report.txt?"** — se não, pula para o passo 8
@@ -58,19 +43,33 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 8. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
 9. Move o original para `/home/user/Videos/processado/`
 
-> `model.transcribe()` retorna `(segments, info)` onde `segments` é um **generator lazy** — só é consumido uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes de consumir o generator. Qualquer tentativa de iterar `segments` uma segunda vez resultará em iterador vazio.
-> `YOUTUBE.txt` e `report.txt` são não-bloqueantes: falha exibe aviso mas não interrompe o processamento.
-> Os modelos spaCy são cacheados em `_cache_modelos` (módulo `youtube.py`) para evitar recarga entre vídeos do mesmo lote.
-> O ffmpeg aplica filtros apenas no stream de áudio; o stream de vídeo é copiado sem re-codificação (`-c:v copy`). Não adicionar filtros de vídeo sem remover esse flag.
-> O Whisper roda em CPU com quantização int8 (`device="cpu", compute_type="int8"`) e `beam_size=5`. Para acelerar, aumentar `WHISPER_MODEL` menor sacrifica precisão; hardware com GPU exigiria mudar `device` e `compute_type`.
+## Módulos Python
 
-### Configuração (.env)
+| Arquivo | Responsabilidade |
+|---|---|
+| `src/main.py` | Orquestração do fluxo completo |
+| `src/youtube.py` | Geração do `YOUTUBE.txt` com spaCy + NLTK ou API Anthropic |
+| `src/report.py` | Geração do `report.txt` com tabela de palavras monitoradas |
 
-Todos os parâmetros ajustáveis ficam em `.env` na raiz do projeto:
+`src/__init__.py` existe mas é vazio — os imports entre módulos funcionam porque Python adiciona o diretório do script ao `sys.path` automaticamente. Nunca executar `python3 main.py` de dentro de `src/` sem garantir que `src/` esteja no path.
+
+## Invariantes não-óbvias
+
+- **Generator lazy do Whisper**: `model.transcribe()` retorna `(segments, info)` onde `segments` é um generator consumível apenas uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes do consumo. Iterar `segments` uma segunda vez retornará vazio.
+- **Transcrição usa o arquivo processado**: o Whisper roda sobre o vídeo com pitch já aplicado (`arquivo_saida`), não sobre o original.
+- **ffmpeg usa `-y`**: sobrescreve arquivos de saída sem confirmação — relevante ao re-processar vídeos que já têm output em `DIR_SAIDA`.
+- **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto. Não adicionar filtros de vídeo sem remover esse flag.
+- **Falha parcial**: se pitch succeed mas transcrição falha, o arquivo processado permanece em `DIR_SAIDA` mas o original fica em `DIR_ENTRADA` (não é movido).
+- **YOUTUBE.txt e report.txt são não-bloqueantes**: falha exibe aviso mas não interrompe o processamento nem impede a movimentação do original.
+- **Modelos spaCy são cacheados**: `_cache_modelos` em `youtube.py` evita recarga entre vídeos do mesmo lote.
+- **Parser da API Anthropic**: `_titulo_descricao_via_api` suporta `DESCRIÇÃO:` multi-linha — linhas subsequentes sem prefixo após `DESCRIÇÃO:` são acumuladas.
+- **Carregamento do .env**: `main.py` carrega `~/.env` primeiro, depois `.env` do projeto. `~/.env` tem precedência (load_dotenv não sobrescreve por padrão).
+
+## Configuração (.env)
 
 | Variável | Padrão | Descrição |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Chave da API Anthropic (opcional — necessária para gerar título/descrição via IA) |
+| `ANTHROPIC_API_KEY` | — | Chave da API Anthropic (opcional) |
 | `DIR_ENTRADA` | `/home/user/Videos/gravado` | Vídeos a processar |
 | `DIR_SAIDA` | `/home/user/Videos/final` | Saída dos vídeos processados |
 | `DIR_BACKUP` | `/home/user/Videos/processado` | Destino dos originais |
@@ -94,37 +93,7 @@ Referência de `PITCH_FATOR` por semitons:
 | -3 | 0.8409 |
 | -4 | 0.7937 |
 
-### Comandos
-```bash
-# Instalar dependências e criar diretórios (rodar como root)
-/home/user/projetos/macho/install.sh
-
-# Executar
-/home/user/projetos/macho/run.sh
-
-# Executar diretamente durante desenvolvimento (equivalente ao run.sh)
-python3 /home/user/projetos/macho/src/main.py
-```
-
-O `install.sh` também cria os diretórios de vídeo (`gravado/`, `final/`, `processado/`) caso não existam.
-
-### Carregamento do .env
-
-`main.py` chama `load_dotenv` duas vezes: primeiro `~/.env`, depois `.env` na raiz do projeto. Como `load_dotenv` não sobrescreve variáveis já definidas, `~/.env` tem precedência sobre o `.env` do projeto. Para sobrescrever, deve-se usar `load_dotenv(..., override=True)`.
-
-### Importações e path
-
-`main.py` importa `youtube` e `report` como módulos irmãos (`from youtube import ...`). Isso funciona porque o Python adiciona o diretório do script (`src/`) ao `sys.path` automaticamente ao executar `python3 src/main.py`. Nunca executar `python3 main.py` de dentro de `src/` sem garantir que `src/` esteja no path.
-
-### Módulos Python
-
-| Arquivo | Responsabilidade |
-|---|---|
-| `src/main.py` | Orquestração do fluxo completo |
-| `src/youtube.py` | Geração do `YOUTUBE.txt` com spaCy + NLTK |
-| `src/report.py` | Geração do `report.txt` com tabela de palavras monitoradas |
-
-### Geração de metadados YouTube (`src/youtube.py`)
+## Geração de metadados YouTube (`src/youtube.py`)
 
 Usa a transcrição (SRT) como fonte e gera `YOUTUBE.txt` com:
 - **Título** — sentença com maior densidade de palavras-chave (máx. 15 palavras), obrigatoriamente contendo ao menos uma palavra-chave
@@ -132,11 +101,11 @@ Usa a transcrição (SRT) como fonte e gera `YOUTUBE.txt` com:
 - **Palavras-chave** — top 15 substantivos/adjetivos lematizados, sem stopwords
 - **Principais conceitos** — entidades nomeadas (NER) + noun chunks compostos
 
-Quando o usuário opta pela API Anthropic, título e descrição são gerados pelo modelo `claude-opus-4-8` usando o texto completo do SRT como contexto; palavras-chave e conceitos continuam sendo gerados via spaCy + NLTK. O system prompt já utiliza `cache_control: {"type": "ephemeral"}` para prompt caching.
+Quando o usuário opta pela API Anthropic, título e descrição são gerados pelo modelo `claude-opus-4-8`; palavras-chave e conceitos continuam via spaCy + NLTK. O system prompt usa `cache_control: {"type": "ephemeral"}` para prompt caching.
 
 Palavras em `PALAVRAS_EXCLUIR` são removidas de keywords, conceitos, título e descrição.
 
-Língua detectada pelo Whisper → modelo spaCy correspondente:
+Língua detectada pelo Whisper → modelo spaCy:
 
 | Língua | Modelo spaCy |
 |---|---|
@@ -144,23 +113,20 @@ Língua detectada pelo Whisper → modelo spaCy correspondente:
 | `en` | `en_core_web_sm` |
 | outras | `en_core_web_sm` (fallback) |
 
-### Relatório de palavras (`src/report.py`)
+## Whisper
 
-Pesquisa as palavras de `PALAVRAS_FILTRO` no SRT usando `\b` (word boundary) e gera `report.txt` com tabela de ocorrências no formato:
+Roda em CPU com quantização int8 (`device="cpu", compute_type="int8"`) e `beam_size=5`. O modelo é carregado uma única vez antes do loop de vídeos (se `fazer_legenda=True`). Para GPU, mudar `device` e `compute_type`. Modelos menores sacrificam precisão por velocidade.
 
-```
-+-----------+--------------+
-| PALAVRA   | TEMPO        |
-+-----------+--------------+
-| bosta     | 00:01:23.000 |
-+-----------+--------------+
-```
+## Extensões de vídeo aceitas
 
-### Dependências
-- `ffmpeg` + `librubberband-dev` (processamento de áudio com pitch shifting)
+`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.flv`, `.ts` — definidas em `EXTENSOES_VIDEO` em `main.py`.
+
+## Dependências
+
+- `ffmpeg` + `librubberband-dev` (pitch shifting via filtro `rubberband`)
 - `rich` (saída no terminal)
 - `python-dotenv` (leitura do `.env`)
-- `faster-whisper` (transcrição de áudio, roda em CPU com `int8`)
+- `faster-whisper` (transcrição, CPU com `int8`)
 - `spacy` + `pt_core_news_sm` + `en_core_web_sm` (NLP para metadados YouTube)
-- `nltk` + dados `stopwords`, `punkt`, `punkt_tab` (stopwords multilíngue)
+- `nltk` + dados `stopwords`, `punkt`, `punkt_tab`
 - `anthropic` (opcional — geração de título/descrição via `claude-opus-4-8`)
