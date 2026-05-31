@@ -157,12 +157,20 @@ def _titulo_descricao_via_api(
     );
     resposta = next((b.text for b in response.content if b.type == "text"), "");
     titulo = "";
-    descricao = "";
+    descricao_linhas: list[str] = [];
+    modo = None;
     for linha in resposta.splitlines():
         if linha.startswith("TÍTULO:"):
             titulo = linha[len("TÍTULO:"):].strip();
+            modo = "titulo";
         elif linha.startswith("DESCRIÇÃO:"):
-            descricao = linha[len("DESCRIÇÃO:"):].strip();
+            primeira = linha[len("DESCRIÇÃO:"):].strip();
+            if primeira:
+                descricao_linhas.append(primeira);
+            modo = "descricao";
+        elif modo == "descricao" and linha.strip():
+            descricao_linhas.append(linha.strip());
+    descricao = " ".join(descricao_linhas);
     return titulo, descricao;
 
 
