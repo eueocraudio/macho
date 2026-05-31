@@ -50,12 +50,13 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 ### Fluxo
 1. Lê vídeos de `/home/user/Videos/gravado/`
 2. Para cada vídeo, cria `/home/user/Videos/final/<stem>/` e aplica o pitch male
-3. Detecta a língua do vídeo via Whisper (lazy — sem consumir os segmentos ainda)
-4. Se já existe `LEGENDAS_{língua}.srt` para essa língua, pula a transcrição
-5. Caso contrário, consome os segmentos e salva o SRT
-6. Gera `YOUTUBE.txt` com título, descrição, palavras-chave e conceitos via spaCy + NLTK
-7. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
-8. Move o original para `/home/user/Videos/processado/`
+3. Pergunta ao usuário: **"Deseja gerar legendas (SRT), YOUTUBE.txt e report.txt?"** — se não, pula para o passo 8
+4. Detecta a língua do vídeo via Whisper (lazy — sem consumir os segmentos ainda)
+5. Se já existe `LEGENDAS_{língua}.srt` para essa língua, pula a transcrição; caso contrário, consome os segmentos e salva o SRT
+6. Pergunta ao usuário: **"Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?"** — se sim, usa `claude-opus-4-8` via `ANTHROPIC_API_KEY`; se não, usa spaCy + NLTK
+7. Gera `YOUTUBE.txt` com título, descrição, palavras-chave e conceitos
+8. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
+9. Move o original para `/home/user/Videos/processado/`
 
 > `model.transcribe()` retorna `(segments, info)` onde `segments` é um **generator lazy** — só é consumido uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes de consumir o generator. Qualquer tentativa de iterar `segments` uma segunda vez resultará em iterador vazio.
 > `YOUTUBE.txt` e `report.txt` são não-bloqueantes: falha exibe aviso mas não interrompe o processamento.
@@ -69,17 +70,18 @@ Todos os parâmetros ajustáveis ficam em `.env` na raiz do projeto:
 
 | Variável | Padrão | Descrição |
 |---|---|---|
+| `ANTHROPIC_API_KEY` | — | Chave da API Anthropic (opcional — necessária para gerar título/descrição via IA) |
 | `DIR_ENTRADA` | `/home/user/Videos/gravado` | Vídeos a processar |
 | `DIR_SAIDA` | `/home/user/Videos/final` | Saída dos vídeos processados |
 | `DIR_BACKUP` | `/home/user/Videos/processado` | Destino dos originais |
-| `PITCH_FATOR` | `0.8909` | Fator rubberband (-2 semitons) |
-| `EQ_GRAVES_FREQ` | `150` | Frequência do boost de graves (Hz) |
+| `PITCH_FATOR` | `0.9500` | Fator rubberband (ajustável por semitom) |
+| `EQ_GRAVES_FREQ` | `180` | Frequência do boost de graves (Hz) |
 | `EQ_GRAVES_WIDTH` | `100` | Largura de banda do boost (Hz) |
 | `EQ_GRAVES_GAIN` | `2` | Ganho do boost de graves (dB) |
 | `EQ_METAL_FREQ` | `3500` | Frequência do corte anti-metálico (Hz) |
 | `EQ_METAL_WIDTH` | `1000` | Largura de banda do corte (Hz) |
 | `EQ_METAL_GAIN` | `-3` | Ganho do corte anti-metálico (dB) |
-| `WHISPER_MODEL` | `small` | Modelo Whisper: `tiny`, `base`, `small`, `medium`, `large` |
+| `WHISPER_MODEL` | `medium` | Modelo Whisper: `tiny`, `base`, `small`, `medium`, `large` |
 | `PALAVRAS_FILTRO` | — | Palavras monitoradas no `report.txt`, separadas por vírgula |
 | `PALAVRAS_EXCLUIR` | — | Palavras banidas do `YOUTUBE.txt`, separadas por vírgula |
 
@@ -126,6 +128,8 @@ Usa a transcrição (SRT) como fonte e gera `YOUTUBE.txt` com:
 - **Palavras-chave** — top 15 substantivos/adjetivos lematizados, sem stopwords
 - **Principais conceitos** — entidades nomeadas (NER) + noun chunks compostos
 
+Quando o usuário opta pela API Anthropic, título e descrição são gerados pelo modelo `claude-opus-4-8` usando o texto completo do SRT como contexto; palavras-chave e conceitos continuam sendo gerados via spaCy + NLTK.
+
 Palavras em `PALAVRAS_EXCLUIR` são removidas de keywords, conceitos, título e descrição.
 
 Língua detectada pelo Whisper → modelo spaCy correspondente:
@@ -149,9 +153,10 @@ Pesquisa as palavras de `PALAVRAS_FILTRO` no SRT usando `\b` (word boundary) e g
 ```
 
 ### Dependências
-- `ffmpeg` (com suporte a `librubberband`)
+- `ffmpeg` + `librubberband-dev` (processamento de áudio com pitch shifting)
 - `rich` (saída no terminal)
 - `python-dotenv` (leitura do `.env`)
 - `faster-whisper` (transcrição de áudio, roda em CPU com `int8`)
 - `spacy` + `pt_core_news_sm` + `en_core_web_sm` (NLP para metadados YouTube)
 - `nltk` + dados `stopwords`, `punkt`, `punkt_tab` (stopwords multilíngue)
+- `anthropic` (opcional — geração de título/descrição via `claude-opus-4-8`)

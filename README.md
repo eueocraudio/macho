@@ -14,11 +14,13 @@ Para cada vídeo encontrado na pasta de entrada:
 
 1. Aplica o efeito de **Pitch Male** na voz (usando ffmpeg com rubberband)
 2. Salva o vídeo novo em uma pasta separada
-3. Detecta automaticamente o idioma do vídeo
-4. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
-5. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
-6. Gera um arquivo **`report.txt`** com a tabela de ocorrências das palavras que você quer monitorar
-7. Move o vídeo original para uma pasta de "já processados"
+3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 7
+4. Detecta automaticamente o idioma do vídeo
+5. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
+6. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
+7. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
+8. Gera um arquivo **`report.txt`** com a tabela de ocorrências das palavras que você quer monitorar
+9. Move o vídeo original para uma pasta de "já processados"
 
 ---
 
@@ -31,7 +33,7 @@ Você vai precisar rodar o script de instalação como **root**:
 ```
 
 Ele vai:
-- Instalar o `ffmpeg` e o `python3` via apt
+- Instalar o `ffmpeg`, `librubberband-dev` e o `python3` via apt
 - Instalar todas as bibliotecas Python necessárias
 - Baixar os modelos de linguagem (spaCy em português e inglês) e os dados do NLTK
 - Criar as pastas de vídeo se ainda não existirem
@@ -60,9 +62,9 @@ Troque o modelo do Whisper por um menor:
 ```
 WHISPER_MODEL=tiny    # mais rápido, menos preciso
 WHISPER_MODEL=base    # bom equilíbrio para textos simples
-WHISPER_MODEL=small   # padrão
-WHISPER_MODEL=medium  # mais preciso, mais lento
-WHISPER_MODEL=large   # máxima precisão
+WHISPER_MODEL=small   # mais leve
+WHISPER_MODEL=medium  # padrão
+WHISPER_MODEL=large   # máxima precisão, mais lento
 ```
 
 **Quer monitorar palavras específicas?**
@@ -78,6 +80,15 @@ Use `PALAVRAS_EXCLUIR`. Essas palavras não vão aparecer em nenhuma parte do t�
 ```
 PALAVRAS_EXCLUIR=merda,corta,coleguinha,eu
 ```
+
+**Quer usar a IA da Anthropic para gerar título e descrição?**
+Configure sua chave de API no `.env`:
+
+```
+ANTHROPIC_API_KEY=<sua-chave>
+```
+
+Com a chave configurada, o script vai perguntar a cada execução se você quer usá-la. Sem a chave, o título e a descrição são gerados localmente.
 
 ---
 
@@ -123,7 +134,7 @@ Esse arquivo é gerado automaticamente a partir da transcrição do vídeo. Ele 
 - **PALAVRAS-CHAVE** — os termos mais frequentes para ajudar no SEO
 - **PRINCIPAIS CONCEITOS** — pessoas, lugares, organizações e tópicos mencionados
 
-Tudo gerado localmente, sem depender de nenhuma API externa. Funciona em português e inglês — o idioma é detectado automaticamente pelo Whisper.
+Por padrão tudo é gerado localmente com spaCy + NLTK, sem depender de API externa. Se quiser título e descrição gerados por IA, configure `ANTHROPIC_API_KEY` no `.env` — o script vai perguntar a cada execução se você quer usar. Funciona em português e inglês — o idioma é detectado automaticamente pelo Whisper.
 
 ---
 
