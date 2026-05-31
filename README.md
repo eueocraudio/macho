@@ -14,7 +14,7 @@ Para cada vídeo encontrado na pasta de entrada:
 
 1. Aplica o efeito de **Pitch Male** na voz (usando ffmpeg com rubberband)
 2. Salva o vídeo novo em uma pasta separada
-3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 7
+3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 9
 4. Detecta automaticamente o idioma do vídeo
 5. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
 6. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
@@ -50,10 +50,11 @@ Os pontos principais que você pode querer ajustar:
 Mude o `PITCH_FATOR`. Quanto menor o número, mais grave fica:
 
 ```
-PITCH_FATOR=0.9439   # leve (-1 semitom)
-PITCH_FATOR=0.8909   # padrão (-2 semitons)
-PITCH_FATOR=0.8409   # grave (-3 semitons)
-PITCH_FATOR=0.7937   # muito grave (-4 semitons)
+PITCH_FATOR=0.9500   # padrão (levemente mais grave)
+PITCH_FATOR=0.9439   # -1 semitom
+PITCH_FATOR=0.8909   # -2 semitons
+PITCH_FATOR=0.8409   # -3 semitons (grave)
+PITCH_FATOR=0.7937   # -4 semitons (muito grave)
 ```
 
 **Transcrição lenta demais?**
