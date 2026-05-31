@@ -20,8 +20,8 @@ DIR_ENTRADA = Path(os.getenv("DIR_ENTRADA", "/home/user/Videos/gravado"));
 DIR_SAIDA   = Path(os.getenv("DIR_SAIDA",   "/home/user/Videos/final"));
 DIR_BACKUP  = Path(os.getenv("DIR_BACKUP",  "/home/user/Videos/processado"));
 
-PITCH_FATOR    = float(os.getenv("PITCH_FATOR",    "0.8909"));
-EQ_GRAVES_FREQ = int(os.getenv("EQ_GRAVES_FREQ",   "150"));
+PITCH_FATOR    = float(os.getenv("PITCH_FATOR",    "0.9500"));
+EQ_GRAVES_FREQ = int(os.getenv("EQ_GRAVES_FREQ",   "180"));
 EQ_GRAVES_WIDTH= int(os.getenv("EQ_GRAVES_WIDTH",  "100"));
 EQ_GRAVES_GAIN = int(os.getenv("EQ_GRAVES_GAIN",   "2"));
 EQ_METAL_FREQ  = int(os.getenv("EQ_METAL_FREQ",    "3500"));
