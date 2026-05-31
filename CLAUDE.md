@@ -43,6 +43,10 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 | `/home/user/Videos/final/<nome_video>/` | Saída — vídeo + legenda + YOUTUBE.txt + report.txt |
 | `/home/user/Videos/processado/` | Arquivo — originais processados com sucesso |
 
+### Extensões de vídeo aceitas
+
+`.mp4`, `.mkv`, `.avi`, `.mov`, `.webm`, `.flv`, `.ts` (definidas em `EXTENSOES_VIDEO` em `main.py`).
+
 ### Fluxo
 1. Lê vídeos de `/home/user/Videos/gravado/`
 2. Para cada vídeo, cria `/home/user/Videos/final/<stem>/` e aplica o pitch male
@@ -56,6 +60,8 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 > `model.transcribe()` retorna `(segments, info)` onde `segments` é um **generator lazy** — só é consumido uma vez, dentro de `escrever_srt()`. A língua é lida de `info.language` antes de consumir o generator. Qualquer tentativa de iterar `segments` uma segunda vez resultará em iterador vazio.
 > `YOUTUBE.txt` e `report.txt` são não-bloqueantes: falha exibe aviso mas não interrompe o processamento.
 > Os modelos spaCy são cacheados em `_cache_modelos` (módulo `youtube.py`) para evitar recarga entre vídeos do mesmo lote.
+> O ffmpeg aplica filtros apenas no stream de áudio; o stream de vídeo é copiado sem re-codificação (`-c:v copy`). Não adicionar filtros de vídeo sem remover esse flag.
+> O Whisper roda em CPU com quantização int8 (`device="cpu", compute_type="int8"`) e `beam_size=5`. Para acelerar, aumentar `WHISPER_MODEL` menor sacrifica precisão; hardware com GPU exigiria mudar `device` e `compute_type`.
 
 ### Configuração (.env)
 
