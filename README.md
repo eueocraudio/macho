@@ -50,7 +50,7 @@ Os pontos principais que você pode querer ajustar:
 Mude o `PITCH_FATOR`. Quanto menor o número, mais grave fica:
 
 ```
-PITCH_FATOR=0.9500   # padrão (levemente mais grave)
+PITCH_FATOR=0.9800   # padrão (levemente mais grave)
 PITCH_FATOR=0.9439   # -1 semitom
 PITCH_FATOR=0.8909   # -2 semitons
 PITCH_FATOR=0.8409   # -3 semitons (grave)
