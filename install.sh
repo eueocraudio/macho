@@ -4,7 +4,7 @@ set -e
 
 echo "==> Instalando dependências do sistema..."
 apt-get update -qq
-apt-get install -y ffmpeg python3 python3-pip
+apt-get install -y ffmpeg librubberband-dev python3 python3-pip
 
 echo "==> Instalando dependências Python..."
 runuser user -c "pip3 install --break-system-packages rich python-dotenv faster-whisper nltk spacy anthropic"
