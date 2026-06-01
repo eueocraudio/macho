@@ -37,8 +37,8 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 2. Para cada vídeo, cria `/home/user/Videos/final/<stem>/` e aplica o pitch male
 3. Pergunta ao usuário: **"Deseja gerar legendas (SRT), YOUTUBE.txt e report.txt?"** — se não, pula para o passo 10
 4. Detecta a língua do vídeo via Whisper (lazy — sem consumir os segmentos ainda)
-5. Se já existe `LEGENDAS_{língua}.srt` para essa língua, pula a transcrição; caso contrário, consome os segmentos e salva o SRT
-6. Detecta marcadores de corte no SRT: se há pares "inicio do corte" / "fim do corte", aplica os cortes no vídeo via ffmpeg e regera o SRT (2ª transcrição)
+5. Se já existe `LEGENDAS_{língua}.srt`, pula apenas a transcrição — ainda gera YOUTUBE.txt e report.txt com o SRT existente
+6. Remove sons não-verbais detectados pelo Whisper (`[tosse]`, `[ruído]`, etc.) e aplica cortes por marcadores de voz — regera o SRT após os cortes (2ª transcrição)
 7. Pergunta ao usuário: **"Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?"** — se sim, usa `claude-opus-4-8` via `ANTHROPIC_API_KEY`; se não, usa spaCy + NLTK
 8. Gera `YOUTUBE.txt` com título, descrição, palavras-chave e conceitos
 9. Gera `report.txt` com tabela de ocorrências das palavras monitoradas (`PALAVRAS_FILTRO`)
@@ -62,8 +62,17 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 - **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto na etapa de pitch. Os cortes (`aplicar_cortes`) usam `filter_complex` com `trim`+`concat`, o que re-codifica o vídeo — não usar `-c:v copy` em conjunto com esse filtro.
 - **Cortes exigem par de marcadores**: `MARCADOR_INICIO_CORTE` sem `MARCADOR_FIM_CORTE` correspondente é ignorado silenciosamente. Marcadores são buscados por substring no conteúdo do bloco SRT (não igualdade exata), após normalização de caixa e acentos via `unicodedata`.
 - **Sons não-verbais**: `detectar_sons_nao_verbais` usa `re.fullmatch(r"\[.*?\]", conteudo)` — só corta blocos SRT cujo texto inteiro seja uma anotação Whisper (ex: `[tosse]`). Blocos mistos (fala + anotação) não são cortados. Os intervalos são mesclados com os cortes de marcador antes de `aplicar_cortes`.
+- **Intervalos sobrepostos em `aplicar_cortes`**: usa `pos = max(pos, fim)` para avançar o ponteiro — evita regressão quando um corte está contido dentro de outro (ex: marcador (1,5) + som (2,3)).
 - **report.txt gerado antes da retranscrição**: `gerar_report_txt` é chamado com o SRT original (pré-corte) para garantir que as seções CORTES e PALAVRAS usem a mesma timeline. `gerar_youtube_txt` usa o SRT pós-retranscrição (timeline do vídeo final).
 - **YOUTUBE.txt não gerado se retranscrição falhar após cortes**: flag `srt_confiavel` evita passar SRT contaminado com marcadores ("início do corte") para a geração de metadados YouTube.
+- **SRT existente não bloqueia metadados**: quando `LEGENDAS_{língua}.srt` já existe, a transcrição é pulada mas YOUTUBE.txt e report.txt são gerados normalmente com o SRT em disco.
+- **CRLF em SRT**: `detectar_cortes`, `detectar_sons_nao_verbais`, `_parsear_srt` e `_texto_do_srt` normalizam `\r\n` → `\n` antes de processar — SRTs gerados no Windows são aceitos sem erro silencioso.
+- **Parser de texto SRT por blocos**: `_texto_do_srt` (youtube.py) e `_parsear_srt` (report.py) filtram o número de sequência por posição (`linhas[0]`), não por `isdigit()` — evita descartar texto numérico legítimo (anos, códigos, etc.).
+- **Vídeos com mesmo stem**: aviso exibido antes do loop quando dois arquivos compartilham o mesmo nome base — o segundo pode sobrescrever SRT e metadados do primeiro.
+- **WhisperModel em try/except**: modelo inválido (ex: `WHISPER_MODEL=turbo`) exibe mensagem clara e encerra com `sys.exit(1)` em vez de traceback cru.
+- **`tmp.replace(saida)`**: `aplicar_cortes` usa `Path.replace()` em vez de `Path.rename()` — substitui o destino atomicamente mesmo que já exista (cross-platform).
+- **Título fallback truncado**: `_titulo` trunca o fallback a 15 palavras quando nenhuma sentença curta com palavra-chave é encontrada.
+- **`_secao_palavras` pré-compila regex**: padrões de `PALAVRAS_FILTRO` são compilados uma vez fora do loop duplo.
 - **Cortes só acontecem com legenda**: se o usuário recusar gerar legenda, nenhum corte é aplicado (sem SRT, sem detecção de marcadores).
 - **Falha parcial**: se pitch succeed mas transcrição falha, o arquivo processado permanece em `DIR_SAIDA` mas o original fica em `DIR_ENTRADA` (não é movido).
 - **YOUTUBE.txt e report.txt são não-bloqueantes**: falha exibe aviso mas não interrompe o processamento nem impede a movimentação do original.
