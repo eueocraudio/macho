@@ -102,7 +102,7 @@ def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]
     for inicio, fim in cortes_ord:
         if pos < inicio:
             manter.append((pos, inicio));
-        pos = fim;
+        pos = max(pos, fim);
     manter.append((pos, None));
 
     filtros = [];
@@ -265,6 +265,14 @@ def processar():
             cortes_marcador = detectar_cortes(arquivo_srt, MARCADOR_INICIO_CORTE, MARCADOR_FIM_CORTE) if CORTE_AUTOMATICO else [];
             sons_nao_verbais = detectar_sons_nao_verbais(arquivo_srt) if REMOVER_SONS_NAO_VERBAIS else [];
             cortes = sorted(set(cortes_marcador + sons_nao_verbais));
+
+            # report gerado com SRT original: CORTES e PALAVRAS usam a mesma timeline
+            progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando report...");
+            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO, cortes_marcador if cortes_marcador else None);
+            if not ok_rp:
+                console.print(f"[yellow]aviso:[/yellow] não foi possível gerar report.txt: {erro_rp}");
+
+            srt_confiavel = True;
             if cortes:
                 desc_cortes = [];
                 if cortes_marcador:
@@ -282,18 +290,18 @@ def processar():
                         ok_t2, _ = escrever_srt(segments2, lingua_ou_erro, dir_destino);
                         if not ok_t2:
                             console.print(f"[yellow]aviso:[/yellow] não foi possível regerar legenda após cortes");
+                            srt_confiavel = False;
                     except Exception as e2:
                         console.print(f"[yellow]aviso:[/yellow] erro na retranscrição após cortes: {e2}");
+                        srt_confiavel = False;
 
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando metadados YouTube...");
-            ok_yt, erro_yt = gerar_youtube_txt(arquivo_srt, dir_destino, lingua_ou_erro, PALAVRAS_EXCLUIR, usar_api_youtube);
-            if not ok_yt:
-                console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
-
-            progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando report...");
-            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO, cortes_marcador if cortes_marcador else None);
-            if not ok_rp:
-                console.print(f"[yellow]aviso:[/yellow] não foi possível gerar report.txt: {erro_rp}");
+            if srt_confiavel:
+                ok_yt, erro_yt = gerar_youtube_txt(arquivo_srt, dir_destino, lingua_ou_erro, PALAVRAS_EXCLUIR, usar_api_youtube);
+                if not ok_yt:
+                    console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
+            else:
+                console.print(f"[yellow]aviso:[/yellow] YOUTUBE.txt não gerado — SRT contém marcadores de corte (retranscrição falhou)");
 
             shutil.move(str(video), DIR_BACKUP / video.name);
             progress.update(task, description=f"[green]✓[/green] {video.name} [dim](LEGENDAS_{lingua_ou_erro}.srt)[/dim]");
