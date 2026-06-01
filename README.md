@@ -113,40 +113,118 @@ Configure sua chave de API no `.env`:
 ANTHROPIC_API_KEY=<sua-chave>
 ```
 
-Com a chave configurada, o script vai perguntar a cada execução se você quer usá-la. Sem a chave, o título e a descrição são gerados localmente.
+Com a chave configurada, o script vai perguntar a cada execução se você quer usá-la — exceto no modo vídeo único, onde a API é usada automaticamente. Sem a chave, o título e a descrição são gerados localmente com spaCy + NLTK.
 
 ---
 
 ## Como usar
 
-Coloque seus vídeos na pasta:
+### Modo lote — vários vídeos de uma vez
 
-```
-/home/user/Videos/gravado/
-```
-
-Depois é só rodar:
+Coloque os vídeos na pasta de entrada e rode:
 
 ```bash
 /home/user/projetos/macho/run.sh
 ```
 
-O terminal vai mostrar o progresso de cada vídeo. Quando terminar, você encontra os resultados em:
+O script vai perguntar se você quer gerar legendas e se quer usar a API da Anthropic, e depois processa todos os vídeos encontrados em `/home/user/Videos/gravado/`.
+
+### Modo vídeo único — sem perguntas
+
+Passe o caminho do vídeo como argumento:
+
+```bash
+python3 /home/user/projetos/macho/src/main.py /caminho/para/video.mp4
+```
+
+Nesse modo o script **não faz nenhuma pergunta**: legenda, cortes e API da Anthropic são ativados automaticamente. Ideal para rodar de forma rápida ou em scripts.
+
+---
+
+### Onde ficam os resultados
 
 ```
 /home/user/Videos/final/
     nome-do-video/
-        nome-do-video.mp4       ← vídeo com a voz alterada
+        nome-do-video.mp4       ← vídeo com a voz alterada (e cortes aplicados)
         LEGENDAS_pt.srt         ← transcrição em português (ou outro idioma detectado)
         YOUTUBE.txt             ← título, descrição e palavras-chave para o YouTube
-        report.txt              ← tabela com ocorrências das palavras monitoradas
+        report.txt              ← tabela de cortes e ocorrências das palavras monitoradas
 ```
 
-E os originais ficam guardados em:
+Os originais são movidos para:
 
 ```
 /home/user/Videos/processado/
 ```
+
+---
+
+## Tutorial passo a passo
+
+### 1. Grave o vídeo
+
+Durante a gravação, se quiser marcar trechos para cortar — erros, tosse, hesitações longas — é só falar as frases de marcação:
+
+> *"início do corte"* ... *"fim do corte"*
+
+O script detecta essas falas na transcrição e remove o trecho do vídeo automaticamente. Tosses e ruídos isolados também são removidos automaticamente pelo Whisper, sem precisar falar nada.
+
+---
+
+### 2. Configure o .env (uma vez só)
+
+Abra o arquivo `.env` na raiz do projeto e ajuste o que precisar. O mínimo para usar a API da Anthropic:
+
+```
+ANTHROPIC_API_KEY=<sua-chave>
+```
+
+Para o pitch, o padrão `PITCH_FATOR=0.9800` já deixa a voz levemente mais grave. Experimente valores menores se quiser mais efeito.
+
+---
+
+### 3. Processe o vídeo
+
+**Opção A — vídeo único (recomendado para uso diário):**
+
+```bash
+python3 /home/user/projetos/macho/src/main.py /home/user/Videos/gravado/aula01.mp4
+```
+
+Sem perguntas. O script aplica pitch, transcreve, corta, gera legenda, YOUTUBE.txt e report.txt.
+
+**Opção B — lote (vários vídeos de uma vez):**
+
+```bash
+/home/user/projetos/macho/run.sh
+```
+
+O script pergunta suas preferências e processa todos os vídeos da pasta `/home/user/Videos/gravado/`.
+
+---
+
+### 4. Pegue os resultados
+
+Depois de processar, tudo fica em:
+
+```
+/home/user/Videos/final/aula01/
+    aula01.mp4        ← vídeo final com voz ajustada e cortes aplicados
+    LEGENDAS_pt.srt   ← legenda para subir junto com o vídeo
+    YOUTUBE.txt       ← copie e cole direto no YouTube
+    report.txt        ← lista de cortes e palavras monitoradas (se configurado)
+```
+
+O arquivo original (`aula01.mp4`) é movido para `/home/user/Videos/processado/` — fica lá como backup.
+
+---
+
+### 5. Suba para o YouTube
+
+1. Faça o upload de `aula01.mp4`
+2. Cole o conteúdo de `YOUTUBE.txt` nos campos de título, descrição e tags
+3. Adicione `LEGENDAS_pt.srt` como legenda na aba de acessibilidade
 
 ---
 

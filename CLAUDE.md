@@ -68,6 +68,7 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 - **SRT existente não bloqueia metadados**: quando `LEGENDAS_{língua}.srt` já existe, a transcrição é pulada mas YOUTUBE.txt e report.txt são gerados normalmente com o SRT em disco.
 - **CRLF em SRT**: `detectar_cortes`, `detectar_sons_nao_verbais`, `_parsear_srt` e `_texto_do_srt` normalizam `\r\n` → `\n` antes de processar — SRTs gerados no Windows são aceitos sem erro silencioso.
 - **Parser de texto SRT por blocos**: `_texto_do_srt` (youtube.py) e `_parsear_srt` (report.py) filtram o número de sequência por posição (`linhas[0]`), não por `isdigit()` — evita descartar texto numérico legítimo (anos, códigos, etc.).
+- **Argumento de linha de comando**: `sys.argv[1]`, se presente, define um único vídeo a processar (qualquer path do filesystem). Nesse modo `fazer_legenda=True` e `usar_api_youtube=True` são forçados sem perguntas. No modo sem argumento (varredura de `DIR_ENTRADA`) o comportamento interativo é mantido. A checagem de `DIR_ENTRADA` só ocorre no modo sem argumento.
 - **Vídeos com mesmo stem**: aviso exibido antes do loop quando dois arquivos compartilham o mesmo nome base — o segundo pode sobrescrever SRT e metadados do primeiro.
 - **WhisperModel em try/except**: modelo inválido (ex: `WHISPER_MODEL=turbo`) exibe mensagem clara e encerra com `sys.exit(1)` em vez de traceback cru.
 - **`tmp.replace(saida)`**: `aplicar_cortes` usa `Path.replace()` em vez de `Path.rename()` — substitui o destino atomicamente mesmo que já exista (cross-platform).
