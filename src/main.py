@@ -215,10 +215,14 @@ def processar():
         tabela.add_row(str(i), v.name);
     console.print(tabela);
 
-    fazer_legenda = Confirm.ask("\nDeseja gerar legendas (SRT), YOUTUBE.txt e report.txt?", default=True);
+    if len(sys.argv) > 1:
+        fazer_legenda    = True;
+        usar_api_youtube = True;
+    else:
+        fazer_legenda = Confirm.ask("\nDeseja gerar legendas (SRT), YOUTUBE.txt e report.txt?", default=True);
+        usar_api_youtube = Confirm.ask("Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?", default=False) if fazer_legenda else False;
 
     if fazer_legenda:
-        usar_api_youtube = Confirm.ask("Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?", default=False);
         console.print(f"\n[dim]Carregando modelo Whisper ({WHISPER_MODEL})...[/dim]");
         try:
             model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8");
@@ -226,7 +230,6 @@ def processar():
             console.print(f"[red]Erro ao carregar modelo Whisper '{WHISPER_MODEL}': {e}[/red]");
             sys.exit(1);
     else:
-        usar_api_youtube = False;
         model = None;
 
     sucesso = [];
