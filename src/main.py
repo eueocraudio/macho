@@ -56,7 +56,7 @@ def _srt_para_segundos(timestamp: str) -> float:
 def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) -> list[tuple[float, float]]:
     norm_inicio = _normalizar(marcador_inicio);
     norm_fim    = _normalizar(marcador_fim);
-    texto = arquivo_srt.read_text(encoding="utf-8");
+    texto = arquivo_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
     blocos = re.split(r"\n\n+", texto.strip());
     cortes = [];
     inicio_pendente = None;
@@ -79,7 +79,7 @@ def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) 
 
 
 def detectar_sons_nao_verbais(arquivo_srt: Path) -> list[tuple[float, float]]:
-    texto = arquivo_srt.read_text(encoding="utf-8");
+    texto = arquivo_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
     blocos = re.split(r"\n\n+", texto.strip());
     intervalos = [];
     for bloco in blocos:
@@ -131,7 +131,7 @@ def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]
     if resultado.returncode != 0:
         tmp.unlink(missing_ok=True);
         return False, resultado.stderr[-800:];
-    tmp.rename(saida);
+    tmp.replace(saida);
     return True, "";
 
 
@@ -207,13 +207,23 @@ def processar():
     if fazer_legenda:
         usar_api_youtube = Confirm.ask("Deseja usar a API da Anthropic para gerar TÍTULO e DESCRIÇÃO?", default=False);
         console.print(f"\n[dim]Carregando modelo Whisper ({WHISPER_MODEL})...[/dim]");
-        model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8");
+        try:
+            model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8");
+        except Exception as e:
+            console.print(f"[red]Erro ao carregar modelo Whisper '{WHISPER_MODEL}': {e}[/red]");
+            sys.exit(1);
     else:
         usar_api_youtube = False;
         model = None;
 
     sucesso = [];
     falha   = [];
+
+    stems_vistos: set[str] = set();
+    for video in videos:
+        if video.stem in stems_vistos:
+            console.print(f"[yellow]aviso:[/yellow] dois vídeos com mesmo nome base '{video.stem}' — o segundo pode sobrescrever dados do primeiro");
+        stems_vistos.add(video.stem);
 
     with Progress(
         SpinnerColumn(),
@@ -250,17 +260,14 @@ def processar():
 
             arquivo_srt = dir_destino / f"LEGENDAS_{lingua}.srt";
             if arquivo_srt.exists():
-                shutil.move(str(video), DIR_BACKUP / video.name);
-                progress.update(task, description=f"[green]✓[/green] {video.name} [dim](legenda {lingua} já existe)[/dim]");
-                sucesso.append(video.name);
-                continue;
-
-            progress.update(task, description=f"[cyan]{video.name}[/cyan] — transcrevendo ({lingua})...");
-            ok_t, lingua_ou_erro = escrever_srt(segments, lingua, dir_destino);
-            if not ok_t:
-                progress.update(task, description=f"[red]✗ transcrição[/red] {video.name}");
-                falha.append((video.name, lingua_ou_erro));
-                continue;
+                lingua_ou_erro = lingua;
+            else:
+                progress.update(task, description=f"[cyan]{video.name}[/cyan] — transcrevendo ({lingua})...");
+                ok_t, lingua_ou_erro = escrever_srt(segments, lingua, dir_destino);
+                if not ok_t:
+                    progress.update(task, description=f"[red]✗ transcrição[/red] {video.name}");
+                    falha.append((video.name, lingua_ou_erro));
+                    continue;
 
             cortes_marcador = detectar_cortes(arquivo_srt, MARCADOR_INICIO_CORTE, MARCADOR_FIM_CORTE) if CORTE_AUTOMATICO else [];
             sons_nao_verbais = detectar_sons_nao_verbais(arquivo_srt) if REMOVER_SONS_NAO_VERBAIS else [];

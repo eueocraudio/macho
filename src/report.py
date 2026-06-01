@@ -3,7 +3,7 @@ from pathlib import Path;
 
 
 def _parsear_srt(caminho_srt: Path) -> list[tuple[str, str]]:
-    conteudo = caminho_srt.read_text(encoding="utf-8");
+    conteudo = caminho_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
     entradas = re.split(r"\n\s*\n", conteudo.strip());
     resultado = [];
     for entrada in entradas:
@@ -14,7 +14,8 @@ def _parsear_srt(caminho_srt: Path) -> list[tuple[str, str]]:
         if not tempo_linha:
             continue;
         tempo_inicio = tempo_linha.split("-->")[0].strip().replace(",", ".");
-        texto = " ".join(l for l in linhas if "-->" not in l and not l.isdigit());
+        # linhas[0] é o número de sequência — pula por posição, não por isdigit()
+        texto = " ".join(l for l in linhas[1:] if "-->" not in l);
         resultado.append((tempo_inicio, texto));
     return resultado;
 
@@ -35,9 +36,9 @@ def _secao_cortes(cortes: list[tuple[float, float]]) -> list[str]:
         rows.append((_formatar_hms(inicio), _formatar_hms(fim), _formatar_hms(duracao)));
 
     col_n       = max(1, len(str(len(rows))));
-    col_inicio  = max(len("INÍCIO"),   max(len(r[0]) for r in rows));
-    col_fim     = max(len("FIM"),      max(len(r[1]) for r in rows));
-    col_duracao = max(len("DURAÇÃO"),  max(len(r[2]) for r in rows));
+    col_inicio  = max(len("INÍCIO"),   max((len(r[0]) for r in rows), default=0));
+    col_fim     = max(len("FIM"),      max((len(r[1]) for r in rows), default=0));
+    col_duracao = max(len("DURAÇÃO"),  max((len(r[2]) for r in rows), default=0));
 
     sep = (f"+-{'-'*col_n}-+-{'-'*col_inicio}-+-{'-'*col_fim}-+-{'-'*col_duracao}-+");
     cab = (f"| {'#'.ljust(col_n)} | {'INÍCIO'.ljust(col_inicio)} "
@@ -54,10 +55,10 @@ def _secao_cortes(cortes: list[tuple[float, float]]) -> list[str]:
 
 def _secao_palavras(entradas: list[tuple[str, str]], palavras: list[str]) -> list[str]:
     linhas = ["PALAVRAS MONITORADAS", ""];
+    padroes = [re.compile(rf"\b{re.escape(p)}\b", re.IGNORECASE) for p in palavras];
     ocorrencias: list[tuple[str, str]] = [];
     for tempo, texto in entradas:
-        for palavra in palavras:
-            padrao = re.compile(rf"\b{re.escape(palavra)}\b", re.IGNORECASE);
+        for padrao, palavra in zip(padroes, palavras):
             if padrao.search(texto):
                 ocorrencias.append((palavra.lower(), tempo));
 

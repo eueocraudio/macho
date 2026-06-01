@@ -26,13 +26,12 @@ def _carregar_modelo(lingua: str) -> spacy.language.Language:
 
 
 def _texto_do_srt(caminho_srt: Path) -> str:
-    linhas = caminho_srt.read_text(encoding="utf-8").splitlines();
+    conteudo = caminho_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
     texto = [];
-    for linha in linhas:
-        linha = linha.strip();
-        if not linha or linha.isdigit() or "-->" in linha:
-            continue;
-        texto.append(linha);
+    for bloco in re.split(r"\n\n+", conteudo.strip()):
+        linhas = [l.strip() for l in bloco.strip().splitlines() if l.strip()];
+        # linhas[0] é número de sequência — pula por posição, não por isdigit()
+        texto += [l for l in linhas[1:] if "-->" not in l];
     return " ".join(texto);
 
 
@@ -122,7 +121,11 @@ def _titulo(doc, palavras_chave: list[str], excluir_set: set[str]) -> str:
     candidatas_curtas = [(s, i, t) for s, i, t in pontuadas if len(t.split()) <= 15];
     if candidatas_curtas:
         return max(candidatas_curtas, key=lambda x: x[0])[2];
-    return pontuadas[0][2] if pontuadas else "";
+    if not pontuadas:
+        return "";
+    titulo = pontuadas[0][2];
+    palavras_titulo = titulo.split();
+    return " ".join(palavras_titulo[:15]) if len(palavras_titulo) > 15 else titulo;
 
 
 def _titulo_descricao_via_api(
