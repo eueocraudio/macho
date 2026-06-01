@@ -185,15 +185,28 @@ def escrever_srt(segments, lingua: str, dir_saida: Path) -> tuple[bool, str]:
 
 
 def processar():
-    for d in (DIR_ENTRADA, DIR_SAIDA, DIR_BACKUP):
+    for d in (DIR_SAIDA, DIR_BACKUP):
         if not d.exists():
             console.print(f"[red]Diretório não encontrado:[/red] {d}");
             sys.exit(1);
 
-    videos = listar_videos();
-    if not videos:
-        console.print(Panel("[yellow]Nenhum vídeo encontrado em:[/yellow]\n" + str(DIR_ENTRADA)));
-        return;
+    if len(sys.argv) > 1:
+        video_path = Path(sys.argv[1]);
+        if not video_path.is_file():
+            console.print(f"[red]Arquivo não encontrado:[/red] {video_path}");
+            sys.exit(1);
+        if video_path.suffix.lower() not in EXTENSOES_VIDEO:
+            console.print(f"[red]Extensão não suportada:[/red] {video_path.suffix} (aceitas: {', '.join(sorted(EXTENSOES_VIDEO))})");
+            sys.exit(1);
+        videos = [video_path];
+    else:
+        if not DIR_ENTRADA.exists():
+            console.print(f"[red]Diretório não encontrado:[/red] {DIR_ENTRADA}");
+            sys.exit(1);
+        videos = listar_videos();
+        if not videos:
+            console.print(Panel("[yellow]Nenhum vídeo encontrado em:[/yellow]\n" + str(DIR_ENTRADA)));
+            return;
 
     tabela = Table(title="Vídeos a processar", show_lines=True);
     tabela.add_column("#", style="dim", width=4);
