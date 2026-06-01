@@ -4,16 +4,16 @@
 
 Você gravou um vídeo, mas sua voz ficou fininha demais? Esse script resolve isso.
 
-Ele pega todos os vídeos de uma pasta, aplica um efeito de voz masculina (mais grave, mais encorpada), corta automaticamente os trechos que você marcou durante a gravação, gera a transcrição automática em SRT, prepara um arquivo de texto com título, descrição e palavras-chave prontos para colar no YouTube, e ainda gera um relatório de palavras que você queira monitorar.
+Ele pega todos os vídeos de uma diretório, aplica um efeito de voz masculina (mais grave, mais encorpada), corta automaticamente os trechos que você marcou durante a gravação, gera a transcrição automática em SRT, prepara um arquivo de texto com título, descrição e palavras-chave prontos para colar no YouTube, e ainda gera um relatório de palavras que você queira monitorar.
 
 ---
 
 ## O que ele faz, exatamente?
 
-Para cada vídeo encontrado na pasta de entrada:
+Para cada vídeo encontrado na diretório de entrada:
 
 1. Aplica o efeito de **Pitch Male** na voz (usando ffmpeg com rubberband)
-2. Salva o vídeo novo em uma pasta separada
+2. Salva o vídeo novo em uma diretório separada
 3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 10
 4. Detecta automaticamente o idioma do vídeo
 5. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
@@ -21,7 +21,7 @@ Para cada vídeo encontrado na pasta de entrada:
 7. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
 8. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
 9. Gera um arquivo **`report.txt`** com os cortes realizados e as ocorrências das palavras monitoradas
-10. Move o vídeo original para uma pasta de "já processados"
+10. Move o vídeo original para uma diretório de "já processados"
 
 ---
 
@@ -37,7 +37,7 @@ Ele vai:
 - Instalar o `ffmpeg`, `librubberband-dev` e o `python3` via apt
 - Instalar todas as bibliotecas Python necessárias
 - Baixar os modelos de linguagem (spaCy em português e inglês) e os dados do NLTK
-- Criar as pastas de vídeo se ainda não existirem
+- Criar os diretórios de vídeo se ainda não existirem
 
 ---
 
@@ -121,7 +121,7 @@ Com a chave configurada, o script vai perguntar a cada execução se você quer 
 
 ### Modo lote — vários vídeos de uma vez
 
-Coloque os vídeos na pasta de entrada e rode:
+Coloque os vídeos na diretório de entrada e rode:
 
 ```bash
 /home/user/projetos/macho/run.sh
@@ -200,7 +200,7 @@ Sem perguntas. O script aplica pitch, transcreve, corta, gera legenda, YOUTUBE.t
 /home/user/projetos/macho/run.sh
 ```
 
-O script pergunta suas preferências e processa todos os vídeos da pasta `/home/user/Videos/gravado/`.
+O script pergunta suas preferências e processa todos os vídeos da diretório `/home/user/Videos/gravado/`.
 
 ---
 
@@ -282,6 +282,6 @@ Se nenhuma das palavras aparecer no vídeo, a tabela informa que não houve ocor
 
 ## Algo deu errado?
 
-Se um vídeo falhar no processamento ou na transcrição, o script **não move o original** — ele fica na pasta `gravado/` esperando você tentar de novo. O erro aparece no terminal ao final da execução.
+Se um vídeo falhar no processamento ou na transcrição, o script **não move o original** — ele fica na diretório `gravado/` esperando você tentar de novo. O erro aparece no terminal ao final da execução.
 
 Se o `YOUTUBE.txt` ou o `report.txt` não puderem ser gerados, o script exibe um aviso mas continua normalmente — o vídeo e a legenda ainda são salvos.
