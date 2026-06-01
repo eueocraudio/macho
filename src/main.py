@@ -32,8 +32,10 @@ EQ_METAL_GAIN  = int(os.getenv("EQ_METAL_GAIN",    "-3"));
 WHISPER_MODEL       = os.getenv("WHISPER_MODEL", "small");
 PALAVRAS_FILTRO     = [p.strip() for p in os.getenv("PALAVRAS_FILTRO",  "").split(",") if p.strip()];
 PALAVRAS_EXCLUIR    = [p.strip() for p in os.getenv("PALAVRAS_EXCLUIR", "").split(",") if p.strip()];
-MARCADOR_INICIO_CORTE = os.getenv("MARCADOR_INICIO_CORTE", "inicio do corte");
-MARCADOR_FIM_CORTE    = os.getenv("MARCADOR_FIM_CORTE",    "fim do corte");
+CORTE_AUTOMATICO        = os.getenv("CORTE_AUTOMATICO",        "1") == "1";
+REMOVER_SONS_NAO_VERBAIS = os.getenv("REMOVER_SONS_NAO_VERBAIS", "1") == "1";
+MARCADOR_INICIO_CORTE   = os.getenv("MARCADOR_INICIO_CORTE", "início do corte");
+MARCADOR_FIM_CORTE      = os.getenv("MARCADOR_FIM_CORTE",    "fim do corte");
 
 EXTENSOES_VIDEO = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".ts"};
 
@@ -68,12 +70,29 @@ def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) 
         t_inicio = _srt_para_segundos(m.group(1));
         t_fim    = _srt_para_segundos(m.group(2));
         conteudo = _normalizar(" ".join(linhas[2:]));
-        if conteudo == norm_inicio:
+        if norm_inicio in conteudo:
             inicio_pendente = t_inicio;
-        elif conteudo == norm_fim and inicio_pendente is not None:
+        elif norm_fim in conteudo and inicio_pendente is not None:
             cortes.append((inicio_pendente, t_fim));
             inicio_pendente = None;
     return cortes;
+
+
+def detectar_sons_nao_verbais(arquivo_srt: Path) -> list[tuple[float, float]]:
+    texto = arquivo_srt.read_text(encoding="utf-8");
+    blocos = re.split(r"\n\n+", texto.strip());
+    intervalos = [];
+    for bloco in blocos:
+        linhas = bloco.strip().splitlines();
+        if len(linhas) < 3:
+            continue;
+        m = re.match(r"(\S+)\s+-->\s+(\S+)", linhas[1]);
+        if not m:
+            continue;
+        conteudo = " ".join(linhas[2:]).strip();
+        if re.fullmatch(r"\[.*?\]", conteudo):
+            intervalos.append((_srt_para_segundos(m.group(1)), _srt_para_segundos(m.group(2))));
+    return intervalos;
 
 
 def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]) -> tuple[bool, str]:
@@ -243,9 +262,16 @@ def processar():
                 falha.append((video.name, lingua_ou_erro));
                 continue;
 
-            cortes = detectar_cortes(arquivo_srt, MARCADOR_INICIO_CORTE, MARCADOR_FIM_CORTE);
+            cortes_marcador = detectar_cortes(arquivo_srt, MARCADOR_INICIO_CORTE, MARCADOR_FIM_CORTE) if CORTE_AUTOMATICO else [];
+            sons_nao_verbais = detectar_sons_nao_verbais(arquivo_srt) if REMOVER_SONS_NAO_VERBAIS else [];
+            cortes = sorted(set(cortes_marcador + sons_nao_verbais));
             if cortes:
-                progress.update(task, description=f"[cyan]{video.name}[/cyan] — aplicando {len(cortes)} corte(s)...");
+                desc_cortes = [];
+                if cortes_marcador:
+                    desc_cortes.append(f"{len(cortes_marcador)} marcador(es)");
+                if sons_nao_verbais:
+                    desc_cortes.append(f"{len(sons_nao_verbais)} som(ns) não-verbal(is)");
+                progress.update(task, description=f"[cyan]{video.name}[/cyan] — aplicando cortes ({', '.join(desc_cortes)})...");
                 ok_c, erro_c = aplicar_cortes(arquivo_saida, arquivo_saida, cortes);
                 if not ok_c:
                     console.print(f"[yellow]aviso:[/yellow] não foi possível aplicar cortes: {erro_c}");
@@ -265,7 +291,7 @@ def processar():
                 console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
 
             progress.update(task, description=f"[cyan]{video.name}[/cyan] — gerando report...");
-            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO, cortes if cortes else None);
+            ok_rp, erro_rp = gerar_report_txt(arquivo_srt, dir_destino, PALAVRAS_FILTRO, cortes_marcador if cortes_marcador else None);
             if not ok_rp:
                 console.print(f"[yellow]aviso:[/yellow] não foi possível gerar report.txt: {erro_rp}");
 

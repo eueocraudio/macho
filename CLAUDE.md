@@ -60,10 +60,13 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 - **Transcrição usa o arquivo processado**: o Whisper roda sobre o vídeo com pitch já aplicado (`arquivo_saida`), não sobre o original.
 - **ffmpeg usa `-y`**: sobrescreve arquivos de saída sem confirmação — relevante ao re-processar vídeos que já têm output em `DIR_SAIDA`.
 - **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto na etapa de pitch. Os cortes (`aplicar_cortes`) usam `filter_complex` com `trim`+`concat`, o que re-codifica o vídeo — não usar `-c:v copy` em conjunto com esse filtro.
-- **Cortes exigem par de marcadores**: `MARCADOR_INICIO_CORTE` sem `MARCADOR_FIM_CORTE` correspondente é ignorado silenciosamente. Marcadores são comparados após normalização de caixa e acentos via `unicodedata`.
+- **Cortes exigem par de marcadores**: `MARCADOR_INICIO_CORTE` sem `MARCADOR_FIM_CORTE` correspondente é ignorado silenciosamente. Marcadores são buscados por substring no conteúdo do bloco SRT (não igualdade exata), após normalização de caixa e acentos via `unicodedata`.
+- **Sons não-verbais**: `detectar_sons_nao_verbais` usa `re.fullmatch(r"\[.*?\]", conteudo)` — só corta blocos SRT cujo texto inteiro seja uma anotação Whisper (ex: `[tosse]`). Blocos mistos (fala + anotação) não são cortados. Os intervalos são mesclados com os cortes de marcador antes de `aplicar_cortes`.
+- **report.txt recebe apenas cortes por marcador**: `cortes_marcador` (não `sons_nao_verbais`) é passado ao `gerar_report_txt`, pois sons não-verbais não são eventos monitorados pelo usuário.
 - **Cortes só acontecem com legenda**: se o usuário recusar gerar legenda, nenhum corte é aplicado (sem SRT, sem detecção de marcadores).
 - **Falha parcial**: se pitch succeed mas transcrição falha, o arquivo processado permanece em `DIR_SAIDA` mas o original fica em `DIR_ENTRADA` (não é movido).
 - **YOUTUBE.txt e report.txt são não-bloqueantes**: falha exibe aviso mas não interrompe o processamento nem impede a movimentação do original.
+- **report.txt não é criado quando vazio**: `gerar_report_txt` retorna `(True, "")` sem criar o arquivo quando `PALAVRAS_FILTRO` está vazio e não há cortes — comportamento silencioso intencional.
 - **Modelos spaCy são cacheados**: `_cache_modelos` em `youtube.py` evita recarga entre vídeos do mesmo lote.
 - **Parser da API Anthropic**: `_titulo_descricao_via_api` suporta `DESCRIÇÃO:` multi-linha — linhas subsequentes sem prefixo após `DESCRIÇÃO:` são acumuladas.
 - **Carregamento do .env**: `main.py` carrega `~/.env` primeiro, depois `.env` do projeto. `~/.env` tem precedência (load_dotenv não sobrescreve por padrão).
@@ -86,7 +89,9 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 | `WHISPER_MODEL` | `small` | Modelo Whisper: `tiny`, `base`, `small`, `medium`, `large` |
 | `PALAVRAS_FILTRO` | — | Palavras monitoradas no `report.txt`, separadas por vírgula |
 | `PALAVRAS_EXCLUIR` | — | Palavras banidas do `YOUTUBE.txt`, separadas por vírgula |
-| `MARCADOR_INICIO_CORTE` | `inicio do corte` | Frase dita para marcar o início de um trecho a cortar |
+| `CORTE_AUTOMATICO` | `1` | `1` ativa o corte automático por marcadores de voz; `0` desativa |
+| `REMOVER_SONS_NAO_VERBAIS` | `1` | `1` remove segmentos anotados pelo Whisper como sons não-verbais (ex: `[tosse]`); `0` desativa |
+| `MARCADOR_INICIO_CORTE` | `início do corte` | Frase dita para marcar o início de um trecho a cortar |
 | `MARCADOR_FIM_CORTE` | `fim do corte` | Frase dita para marcar o fim de um trecho a cortar |
 
 Referência de `PITCH_FATOR` por semitons:
