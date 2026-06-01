@@ -17,7 +17,7 @@ Para cada vídeo encontrado na pasta de entrada:
 3. Pergunta se você quer gerar legendas, YOUTUBE.txt e report.txt — se não, pula direto para o passo 10
 4. Detecta automaticamente o idioma do vídeo
 5. Gera um arquivo de **legendas `.srt`** (usando Whisper) — se já existir para esse idioma, pula
-6. Detecta **marcadores de corte** na legenda e, se houver, remove os trechos do vídeo e regera a legenda com os tempos corretos
+6. Remove automaticamente **sons não-verbais** detectados pelo Whisper (ex: `[tosse]`, `[ruído]`) e **trechos marcados por voz** durante a gravação ("início do corte" / "fim do corte") — regera a legenda com os tempos corretos
 7. Pergunta se você quer usar a **API da Anthropic** para gerar o título e a descrição — se não, usa análise de texto local (spaCy + NLTK)
 8. Gera um arquivo **`YOUTUBE.txt`** com título, descrição, palavras-chave e principais conceitos
 9. Gera um arquivo **`report.txt`** com os cortes realizados e as ocorrências das palavras monitoradas
@@ -83,15 +83,28 @@ Use `PALAVRAS_EXCLUIR`. Essas palavras não vão aparecer em nenhuma parte do t�
 PALAVRAS_EXCLUIR=merda,corta,coleguinha,eu
 ```
 
-**Quer mudar as frases de marcação de corte?**
-Por padrão, o script detecta "inicio do corte" e "fim do corte" na legenda. Você pode trocar por qualquer coisa que preferir falar durante a gravação:
+**Quer desativar o corte automático por marcadores de voz?**
+Por padrão o script detecta "início do corte" e "fim do corte" na legenda e remove esses trechos. Para desativar:
+
+```
+CORTE_AUTOMATICO=0
+```
+
+Para mudar as frases de marcação:
 
 ```
 MARCADOR_INICIO_CORTE=começa o corte
 MARCADOR_FIM_CORTE=termina o corte
 ```
 
-A comparação ignora acentos e maiúsculas, então "Início do Corte" e "inicio do corte" são tratados igual.
+A comparação ignora acentos e maiúsculas, e basta a frase aparecer dentro do segmento (não precisa ser exata).
+
+**Quer desativar a remoção de sons não-verbais (tosse, ruídos)?**
+Por padrão o script remove automaticamente os segmentos que o Whisper anota como sons não-verbais (`[tosse]`, `[ruído]`, `[espirro]`, etc.). Para desativar:
+
+```
+REMOVER_SONS_NAO_VERBAIS=0
+```
 
 **Quer usar a IA da Anthropic para gerar título e descrição?**
 Configure sua chave de API no `.env`:
