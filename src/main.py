@@ -206,8 +206,8 @@ def aplicar_pitch_male(entrada: Path, saida: Path) -> tuple[bool, str]:
     saida.parent.mkdir(parents=True, exist_ok=True);
     filtro = (
         f"rubberband=pitch={PITCH_FATOR}:formant=1:pitchq=quality,"
-        f"equalizer=f={EQ_GRAVES_FREQ}:t=o:w={EQ_GRAVES_WIDTH}:g={EQ_GRAVES_GAIN},"
-        f"equalizer=f={EQ_METAL_FREQ}:t=o:w={EQ_METAL_WIDTH}:g={EQ_METAL_GAIN}"
+        f"equalizer=f={EQ_GRAVES_FREQ}:t=h:w={EQ_GRAVES_WIDTH}:g={EQ_GRAVES_GAIN},"
+        f"equalizer=f={EQ_METAL_FREQ}:t=h:w={EQ_METAL_WIDTH}:g={EQ_METAL_GAIN}"
     );
     codec_audio = _AUDIO_CODEC_POR_EXT.get(saida.suffix.lower());
     cmd = [
