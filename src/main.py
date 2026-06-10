@@ -57,6 +57,7 @@ EQ_GRAVES_GAIN = _env_float("EQ_GRAVES_GAIN", 2);
 EQ_METAL_FREQ  = _env_int("EQ_METAL_FREQ",    3500);
 EQ_METAL_WIDTH = _env_int("EQ_METAL_WIDTH",   1000);
 EQ_METAL_GAIN  = _env_float("EQ_METAL_GAIN",  -3);
+PRESERVAR_FORMANTES = os.getenv("PRESERVAR_FORMANTES", "1") == "1";
 WHISPER_MODEL       = os.getenv("WHISPER_MODEL", "small");
 PALAVRAS_FILTRO     = [p.strip() for p in os.getenv("PALAVRAS_FILTRO",  "").split(",") if p.strip()];
 PALAVRAS_EXCLUIR    = [p.strip() for p in os.getenv("PALAVRAS_EXCLUIR", "").split(",") if p.strip()];
@@ -205,7 +206,7 @@ def listar_videos() -> list[Path]:
 def aplicar_pitch_male(entrada: Path, saida: Path) -> tuple[bool, str]:
     saida.parent.mkdir(parents=True, exist_ok=True);
     filtro = (
-        f"rubberband=pitch={PITCH_FATOR}:formant=1:pitchq=quality,"
+        f"rubberband=pitch={PITCH_FATOR}:formant={1 if PRESERVAR_FORMANTES else 0}:pitchq=quality,"
         f"equalizer=f={EQ_GRAVES_FREQ}:t=h:w={EQ_GRAVES_WIDTH}:g={EQ_GRAVES_GAIN},"
         f"equalizer=f={EQ_METAL_FREQ}:t=h:w={EQ_METAL_WIDTH}:g={EQ_METAL_GAIN}"
     );

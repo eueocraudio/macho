@@ -92,6 +92,8 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 
 ## Configuração (.env)
 
+O `.env` real é **gitignored** (pode conter `ANTHROPIC_API_KEY`); o template versionado é `.env.example`. Ao adicionar uma variável nova, atualize os dois.
+
 | Variável | Padrão | Descrição |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | — | Chave da API Anthropic (opcional) |
@@ -105,6 +107,7 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 | `EQ_METAL_FREQ` | `3500` | Frequência do corte anti-metálico (Hz) |
 | `EQ_METAL_WIDTH` | `1000` | Largura de banda do corte (Hz) |
 | `EQ_METAL_GAIN` | `-3` | Ganho do corte anti-metálico (dB) |
+| `PRESERVAR_FORMANTES` | `1` | `1` preserva formantes (voz natural); `0` desloca formantes junto com o pitch (`formant=0` no rubberband — voz mais encorpada, costuma soar menos metálica) |
 | `WHISPER_MODEL` | `small` | Modelo Whisper: `tiny`, `base`, `small`, `medium`, `large` |
 | `PALAVRAS_FILTRO` | — | Palavras monitoradas no `report.txt`, separadas por vírgula |
 | `PALAVRAS_EXCLUIR` | — | Palavras banidas do `YOUTUBE.txt`, separadas por vírgula |
