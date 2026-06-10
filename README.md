@@ -30,7 +30,7 @@ Para cada vídeo encontrado na diretório de entrada:
 Você vai precisar rodar o script de instalação como **root**:
 
 ```bash
-/home/user/projetos/macho/install.sh
+/home/user/desenv/macho/install.sh
 ```
 
 Ele vai:
@@ -124,7 +124,7 @@ Com a chave configurada, o script vai perguntar a cada execução se você quer 
 Coloque os vídeos na diretório de entrada e rode:
 
 ```bash
-/home/user/projetos/macho/run.sh
+/home/user/desenv/macho/run.sh
 ```
 
 O script vai perguntar se você quer gerar legendas e se quer usar a API da Anthropic, e depois processa todos os vídeos encontrados em `/home/user/Videos/gravado/`.
@@ -134,7 +134,7 @@ O script vai perguntar se você quer gerar legendas e se quer usar a API da Anth
 Passe o caminho do vídeo como argumento:
 
 ```bash
-python3 /home/user/projetos/macho/src/main.py /caminho/para/video.mp4
+python3 /home/user/desenv/macho/src/main.py /caminho/para/video.mp4
 ```
 
 Nesse modo o script **não faz nenhuma pergunta**: legenda, cortes e API da Anthropic são ativados automaticamente. Ideal para rodar de forma rápida ou em scripts.
@@ -189,7 +189,7 @@ Para o pitch, o padrão `PITCH_FATOR=0.9800` já deixa a voz levemente mais grav
 **Opção A — vídeo único (recomendado para uso diário):**
 
 ```bash
-python3 /home/user/projetos/macho/src/main.py /home/user/Videos/gravado/aula01.mp4
+python3 /home/user/desenv/macho/src/main.py /home/user/Videos/gravado/aula01.mp4
 ```
 
 Sem perguntas. O script aplica pitch, transcreve, corta, gera legenda, YOUTUBE.txt e report.txt.
@@ -197,7 +197,7 @@ Sem perguntas. O script aplica pitch, transcreve, corta, gera legenda, YOUTUBE.t
 **Opção B — lote (vários vídeos de uma vez):**
 
 ```bash
-/home/user/projetos/macho/run.sh
+/home/user/desenv/macho/run.sh
 ```
 
 O script pergunta suas preferências e processa todos os vídeos da diretório `/home/user/Videos/gravado/`.

@@ -26,7 +26,7 @@ def _carregar_modelo(lingua: str) -> spacy.language.Language:
 
 
 def _texto_do_srt(caminho_srt: Path) -> str:
-    conteudo = caminho_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
+    conteudo = caminho_srt.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n");
     texto = [];
     for bloco in re.split(r"\n\n+", conteudo.strip()):
         linhas = [l.strip() for l in bloco.strip().splitlines() if l.strip()];
@@ -84,7 +84,8 @@ def _conceitos(doc, excluir_set: set[str]) -> list[str]:
                 and not _sentenca_contem_excluida(texto, excluir_set)):
             vistos.add(texto.lower());
             resultado.append(texto);
-    return sorted(resultado)[:15];
+    # preserva a ordem de relevância (entidades antes de noun chunks); só limita a 15
+    return resultado[:15];
 
 
 def _pontuar_sentencas(doc, chave_set: set[str], excluir_set: set[str]) -> list[tuple[int, int, str]]:

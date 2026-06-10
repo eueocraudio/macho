@@ -10,13 +10,16 @@ Processa vídeos aplicando efeito de Pitch Male (voz masculina) usando `ffmpeg` 
 
 ```bash
 # Instalar dependências e criar diretórios (rodar como root)
-/home/user/projetos/macho/install.sh
+/home/user/desenv/macho/install.sh
 
-# Executar
-/home/user/projetos/macho/run.sh
+# Executar (varredura de DIR_ENTRADA, modo interativo)
+/home/user/desenv/macho/run.sh
 
 # Executar diretamente durante desenvolvimento
-python3 /home/user/projetos/macho/src/main.py
+python3 /home/user/desenv/macho/src/main.py
+
+# Processar um único vídeo (modo automático: legenda + API YouTube forçados)
+python3 /home/user/desenv/macho/src/main.py /caminho/para/video.mp4
 ```
 
 ## Interface
@@ -60,15 +63,20 @@ Este projeto é uma aplicação de terminal (CLI). Nunca usar PySide6 ou qualque
 - **Transcrição usa o arquivo processado**: o Whisper roda sobre o vídeo com pitch já aplicado (`arquivo_saida`), não sobre o original.
 - **ffmpeg usa `-y`**: sobrescreve arquivos de saída sem confirmação — relevante ao re-processar vídeos que já têm output em `DIR_SAIDA`.
 - **ffmpeg copia vídeo sem re-codificação**: `-c:v copy` copia o stream de vídeo intacto na etapa de pitch. Os cortes (`aplicar_cortes`) usam `filter_complex` com `trim`+`concat`, o que re-codifica o vídeo — não usar `-c:v copy` em conjunto com esse filtro.
+- **Codec de áudio por container**: o áudio é sempre reencodado (pitch e cortes). `_AUDIO_CODEC_POR_EXT` força `-c:a libopus` apenas para `.webm`/`.ogg`/`.ogv` (containers que não aceitam o encoder default ao reencodar). Para os demais containers, `-c:a` é **omitido** e o ffmpeg escolhe o default do container — não forçar `aac`, que quebraria o muxer `.avi`.
 - **Cortes exigem par de marcadores**: `MARCADOR_INICIO_CORTE` sem `MARCADOR_FIM_CORTE` correspondente é ignorado silenciosamente. Marcadores são buscados por substring no conteúdo do bloco SRT (não igualdade exata), após normalização de caixa e acentos via `unicodedata`.
 - **Sons não-verbais**: `detectar_sons_nao_verbais` usa `re.fullmatch(r"\[.*?\]", conteudo)` — só corta blocos SRT cujo texto inteiro seja uma anotação Whisper (ex: `[tosse]`). Blocos mistos (fala + anotação) não são cortados. Os intervalos são mesclados com os cortes de marcador antes de `aplicar_cortes`.
 - **Intervalos sobrepostos em `aplicar_cortes`**: usa `pos = max(pos, fim)` para avançar o ponteiro — evita regressão quando um corte está contido dentro de outro (ex: marcador (1,5) + som (2,3)).
+- **Último trecho fechado por `ffprobe`**: `aplicar_cortes` consulta a duração real via `_duracao_video` (ffprobe) e fecha o segmento final com `end=duração` em vez de deixar `trim` aberto. Trechos de duração ≈0 (ex.: corte que termina no fim do vídeo) são descartados; se nada sobrar, retorna `(False, "...nada a manter")`. Sem ffprobe (falha/ausente), mantém o trim aberto (`end=None`) — comportamento antigo.
 - **report.txt gerado antes da retranscrição**: `gerar_report_txt` é chamado com o SRT original (pré-corte) para garantir que as seções CORTES e PALAVRAS usem a mesma timeline. `gerar_youtube_txt` usa o SRT pós-retranscrição (timeline do vídeo final).
-- **YOUTUBE.txt não gerado se retranscrição falhar após cortes**: flag `srt_confiavel` evita passar SRT contaminado com marcadores ("início do corte") para a geração de metadados YouTube.
+- **YOUTUBE.txt não gerado se SRT contém marcadores**: flag `srt_confiavel` evita passar SRT contaminado com marcadores ("início do corte") para a geração de metadados YouTube. É posta em `False` tanto quando a retranscrição pós-corte falha quanto quando `aplicar_cortes` falha com `cortes_marcador` presentes (cortes não aplicados ⇒ as falas dos marcadores continuam no SRT).
 - **SRT existente não bloqueia metadados**: quando `LEGENDAS_{língua}.srt` já existe, a transcrição é pulada mas YOUTUBE.txt e report.txt são gerados normalmente com o SRT em disco.
 - **CRLF em SRT**: `detectar_cortes`, `detectar_sons_nao_verbais`, `_parsear_srt` e `_texto_do_srt` normalizam `\r\n` → `\n` antes de processar — SRTs gerados no Windows são aceitos sem erro silencioso.
+- **Leitura de SRT tolerante a codificação**: todas as leituras de SRT usam `read_text(encoding="utf-8", errors="replace")` — um `LEGENDAS_*.srt` colocado à mão em outra codificação não derruba o processamento.
 - **Parser de texto SRT por blocos**: `_texto_do_srt` (youtube.py) e `_parsear_srt` (report.py) filtram o número de sequência por posição (`linhas[0]`), não por `isdigit()` — evita descartar texto numérico legítimo (anos, códigos, etc.).
 - **Argumento de linha de comando**: `sys.argv[1]`, se presente, define um único vídeo a processar (qualquer path do filesystem). Nesse modo `fazer_legenda=True` e `usar_api_youtube=True` são forçados sem perguntas. No modo sem argumento (varredura de `DIR_ENTRADA`) o comportamento interativo é mantido. A checagem de `DIR_ENTRADA` só ocorre no modo sem argumento.
+- **Arquivamento condicional do original**: `_arquivar_original` só move para `DIR_BACKUP` quando `video.parent.resolve() == DIR_ENTRADA.resolve()` (resolve o **diretório** que contém o arquivo, não o alvo de um eventual symlink do próprio vídeo — caso contrário um vídeo symlinkado em `DIR_ENTRADA` nunca seria arquivado e seria reprocessado a cada execução). No modo vídeo único com path fora de `DIR_ENTRADA`, o original é **mantido no lugar** (apenas um aviso é exibido) — evita realocar arquivos arbitrários do usuário. Colisão de nome em `DIR_BACKUP` gera sufixo ` (N)` em vez de sobrescrever.
+- **Parsing numérico do `.env` tolerante**: `_env_int`/`_env_float` caem no default com aviso quando o valor é inválido (em vez de `ValueError` cru no boot). Ganhos de EQ e `PITCH_FATOR` aceitam frações; freqs/larguras são inteiros.
 - **Vídeos com mesmo stem**: aviso exibido antes do loop quando dois arquivos compartilham o mesmo nome base — o segundo pode sobrescrever SRT e metadados do primeiro.
 - **WhisperModel em try/except**: modelo inválido (ex: `WHISPER_MODEL=turbo`) exibe mensagem clara e encerra com `sys.exit(1)` em vez de traceback cru.
 - **`tmp.replace(saida)`**: `aplicar_cortes` usa `Path.replace()` em vez de `Path.rename()` — substitui o destino atomicamente mesmo que já exista (cross-platform).

@@ -15,20 +15,48 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.prompt import Confirm;
 from rich.table import Table;
 
+console = Console();
+
 load_dotenv(Path.home() / ".env");
 load_dotenv(Path(__file__).parent.parent / ".env");
+
+
+def _env_int(nome: str, default: int) -> int:
+    bruto = os.getenv(nome);
+    if bruto is None or not bruto.strip():
+        return default;
+    try:
+        return int(bruto);
+    except ValueError:
+        try:
+            return int(float(bruto));
+        except ValueError:
+            console.print(f"[yellow]aviso:[/yellow] {nome}='{bruto}' inválido — usando {default}");
+            return default;
+
+
+def _env_float(nome: str, default: float) -> float:
+    bruto = os.getenv(nome);
+    if bruto is None or not bruto.strip():
+        return default;
+    try:
+        return float(bruto);
+    except ValueError:
+        console.print(f"[yellow]aviso:[/yellow] {nome}='{bruto}' inválido — usando {default}");
+        return default;
+
 
 DIR_ENTRADA = Path(os.getenv("DIR_ENTRADA", "/home/user/Videos/gravado"));
 DIR_SAIDA   = Path(os.getenv("DIR_SAIDA",   "/home/user/Videos/final"));
 DIR_BACKUP  = Path(os.getenv("DIR_BACKUP",  "/home/user/Videos/processado"));
 
-PITCH_FATOR    = float(os.getenv("PITCH_FATOR",    "0.9800"));
-EQ_GRAVES_FREQ = int(os.getenv("EQ_GRAVES_FREQ",   "180"));
-EQ_GRAVES_WIDTH= int(os.getenv("EQ_GRAVES_WIDTH",  "100"));
-EQ_GRAVES_GAIN = int(os.getenv("EQ_GRAVES_GAIN",   "2"));
-EQ_METAL_FREQ  = int(os.getenv("EQ_METAL_FREQ",    "3500"));
-EQ_METAL_WIDTH = int(os.getenv("EQ_METAL_WIDTH",   "1000"));
-EQ_METAL_GAIN  = int(os.getenv("EQ_METAL_GAIN",    "-3"));
+PITCH_FATOR    = _env_float("PITCH_FATOR",    0.9800);
+EQ_GRAVES_FREQ = _env_int("EQ_GRAVES_FREQ",   180);
+EQ_GRAVES_WIDTH= _env_int("EQ_GRAVES_WIDTH",  100);
+EQ_GRAVES_GAIN = _env_float("EQ_GRAVES_GAIN", 2);
+EQ_METAL_FREQ  = _env_int("EQ_METAL_FREQ",    3500);
+EQ_METAL_WIDTH = _env_int("EQ_METAL_WIDTH",   1000);
+EQ_METAL_GAIN  = _env_float("EQ_METAL_GAIN",  -3);
 WHISPER_MODEL       = os.getenv("WHISPER_MODEL", "small");
 PALAVRAS_FILTRO     = [p.strip() for p in os.getenv("PALAVRAS_FILTRO",  "").split(",") if p.strip()];
 PALAVRAS_EXCLUIR    = [p.strip() for p in os.getenv("PALAVRAS_EXCLUIR", "").split(",") if p.strip()];
@@ -39,7 +67,10 @@ MARCADOR_FIM_CORTE      = os.getenv("MARCADOR_FIM_CORTE",    "fim do corte");
 
 EXTENSOES_VIDEO = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".ts"};
 
-console = Console();
+# Override de codec de áudio só para containers que não aceitam o default do ffmpeg
+# ao reencodar (webm/ogg precisam de Opus). Para os demais, NÃO passamos `-c:a` —
+# o ffmpeg escolhe o encoder padrão do container, que é o comportamento testado.
+_AUDIO_CODEC_POR_EXT = {".webm": "libopus", ".ogg": "libopus", ".ogv": "libopus"};
 
 
 def _normalizar(texto: str) -> str:
@@ -56,7 +87,7 @@ def _srt_para_segundos(timestamp: str) -> float:
 def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) -> list[tuple[float, float]]:
     norm_inicio = _normalizar(marcador_inicio);
     norm_fim    = _normalizar(marcador_fim);
-    texto = arquivo_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
+    texto = arquivo_srt.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n");
     blocos = re.split(r"\n\n+", texto.strip());
     cortes = [];
     inicio_pendente = None;
@@ -79,7 +110,7 @@ def detectar_cortes(arquivo_srt: Path, marcador_inicio: str, marcador_fim: str) 
 
 
 def detectar_sons_nao_verbais(arquivo_srt: Path) -> list[tuple[float, float]]:
-    texto = arquivo_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
+    texto = arquivo_srt.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n");
     blocos = re.split(r"\n\n+", texto.strip());
     intervalos = [];
     for bloco in blocos:
@@ -95,7 +126,24 @@ def detectar_sons_nao_verbais(arquivo_srt: Path) -> list[tuple[float, float]]:
     return intervalos;
 
 
+def _duracao_video(caminho: Path) -> float | None:
+    cmd = [
+        "ffprobe", "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(caminho),
+    ];
+    resultado = subprocess.run(cmd, capture_output=True, text=True);
+    if resultado.returncode != 0:
+        return None;
+    try:
+        return float(resultado.stdout.strip());
+    except ValueError:
+        return None;
+
+
 def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]) -> tuple[bool, str]:
+    duracao = _duracao_video(entrada);
     cortes_ord = sorted(cortes);
     manter = [];
     pos = 0.0;
@@ -103,7 +151,16 @@ def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]
         if pos < inicio:
             manter.append((pos, inicio));
         pos = max(pos, fim);
-    manter.append((pos, None));
+    # fecha o último trecho com a duração real (ffprobe); sem ela, mantém trim aberto
+    if duracao is not None:
+        manter.append((pos, duracao));
+    else:
+        manter.append((pos, None));
+    # descarta trechos de duração ~zero (ex.: corte que termina no fim do vídeo);
+    # 0.0001s fica abaixo da precisão de 1ms do SRT, então nunca descarta fala real
+    manter = [(s, e) for s, e in manter if e is None or e - s > 0.0001];
+    if not manter:
+        return False, "todos os trechos foram removidos — nada a manter";
 
     filtros = [];
     for i, (s, e) in enumerate(manter):
@@ -119,14 +176,17 @@ def aplicar_cortes(entrada: Path, saida: Path, cortes: list[tuple[float, float]]
     filtros.append(f"{concat_inputs}concat=n={n}:v=1:a=1[v][a]");
 
     tmp = saida.parent / f"_tmp_corte_{saida.stem}{saida.suffix}";
+    codec_audio = _AUDIO_CODEC_POR_EXT.get(saida.suffix.lower());
     cmd = [
         "ffmpeg", "-y",
         "-i", str(entrada),
         "-filter_complex", "; ".join(filtros),
         "-map", "[v]",
         "-map", "[a]",
-        str(tmp),
     ];
+    if codec_audio:
+        cmd += ["-c:a", codec_audio];
+    cmd.append(str(tmp));
     resultado = subprocess.run(cmd, capture_output=True, text=True);
     if resultado.returncode != 0:
         tmp.unlink(missing_ok=True);
@@ -149,13 +209,16 @@ def aplicar_pitch_male(entrada: Path, saida: Path) -> tuple[bool, str]:
         f"equalizer=f={EQ_GRAVES_FREQ}:t=o:w={EQ_GRAVES_WIDTH}:g={EQ_GRAVES_GAIN},"
         f"equalizer=f={EQ_METAL_FREQ}:t=o:w={EQ_METAL_WIDTH}:g={EQ_METAL_GAIN}"
     );
+    codec_audio = _AUDIO_CODEC_POR_EXT.get(saida.suffix.lower());
     cmd = [
         "ffmpeg", "-y",
         "-i", str(entrada),
         "-af", filtro,
         "-c:v", "copy",
-        str(saida),
     ];
+    if codec_audio:
+        cmd += ["-c:a", codec_audio];
+    cmd.append(str(saida));
     resultado = subprocess.run(cmd, capture_output=True, text=True);
     if resultado.returncode != 0:
         return False, resultado.stderr[-800:];
@@ -182,6 +245,26 @@ def escrever_srt(segments, lingua: str, dir_saida: Path) -> tuple[bool, str]:
         return True, lingua;
     except Exception as e:
         return False, str(e);
+
+
+def _arquivar_original(video: Path) -> None:
+    # Só arquiva originais que vieram de DIR_ENTRADA. No modo vídeo único o
+    # arquivo pode estar em qualquer lugar do filesystem — não o realocamos.
+    try:
+        dentro_entrada = video.parent.resolve() == DIR_ENTRADA.resolve();
+    except OSError:
+        dentro_entrada = False;
+    if not dentro_entrada:
+        console.print(f"[dim]original mantido em {video.parent} (fora de DIR_ENTRADA — não arquivado)[/dim]");
+        return;
+    destino = DIR_BACKUP / video.name;
+    if destino.exists():
+        i = 1;
+        while (DIR_BACKUP / f"{video.stem} ({i}){video.suffix}").exists():
+            i += 1;
+        destino = DIR_BACKUP / f"{video.stem} ({i}){video.suffix}";
+        console.print(f"[yellow]aviso:[/yellow] já existe '{video.name}' em backup — arquivando como '{destino.name}'");
+    shutil.move(str(video), str(destino));
 
 
 def processar():
@@ -260,7 +343,7 @@ def processar():
                 continue;
 
             if not fazer_legenda:
-                shutil.move(str(video), DIR_BACKUP / video.name);
+                _arquivar_original(video);
                 progress.update(task, description=f"[green]✓[/green] {video.name} [dim](sem legenda)[/dim]");
                 sucesso.append(video.name);
                 continue;
@@ -306,6 +389,10 @@ def processar():
                 ok_c, erro_c = aplicar_cortes(arquivo_saida, arquivo_saida, cortes);
                 if not ok_c:
                     console.print(f"[yellow]aviso:[/yellow] não foi possível aplicar cortes: {erro_c}");
+                    # cortes não aplicados → o SRT ainda contém as falas dos marcadores
+                    # ("início/fim do corte"); não alimentar o YouTube com elas
+                    if cortes_marcador:
+                        srt_confiavel = False;
                 else:
                     progress.update(task, description=f"[cyan]{video.name}[/cyan] — retranscrevendo após cortes ({lingua_ou_erro})...");
                     try:
@@ -324,9 +411,9 @@ def processar():
                 if not ok_yt:
                     console.print(f"[yellow]aviso:[/yellow] não foi possível gerar YOUTUBE.txt: {erro_yt}");
             else:
-                console.print(f"[yellow]aviso:[/yellow] YOUTUBE.txt não gerado — SRT contém marcadores de corte (retranscrição falhou)");
+                console.print(f"[yellow]aviso:[/yellow] YOUTUBE.txt não gerado — SRT ainda contém marcadores de corte (cortes ou retranscrição não concluídos)");
 
-            shutil.move(str(video), DIR_BACKUP / video.name);
+            _arquivar_original(video);
             progress.update(task, description=f"[green]✓[/green] {video.name} [dim](LEGENDAS_{lingua_ou_erro}.srt)[/dim]");
             sucesso.append(video.name);
 

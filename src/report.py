@@ -3,7 +3,7 @@ from pathlib import Path;
 
 
 def _parsear_srt(caminho_srt: Path) -> list[tuple[str, str]]:
-    conteudo = caminho_srt.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n");
+    conteudo = caminho_srt.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n");
     entradas = re.split(r"\n\s*\n", conteudo.strip());
     resultado = [];
     for entrada in entradas:
